@@ -17,9 +17,9 @@
 <body>
   <div id="app" data-state="boot">
     <video id="video" muted playsinline autoplay disablepictureinpicture></video>
+    <!-- Result freeze-frame (js/still.js) -->
+    <canvas id="still" class="layer"></canvas>
     <div class="layer scrim"></div>
-    <div class="half-dim v" data-side="L"></div>
-    <div class="half-dim v" data-side="R"></div>
     <canvas id="overlay" class="layer"></canvas>
 
     <!-- Invisible: hold 1.5 s to open settings -->
@@ -43,10 +43,14 @@
     </div>
     <div class="countdown" id="countdown"></div>
 
+    <div class="attract v rise" id="attract">
+      <h2 class="attract-title">Кто кого?</h2>
+      <p class="attract-sub">Встаньте вдвоём в овалы</p>
+    </div>
+
     <footer class="bottom">
       <p class="notice v rise" id="notice"></p>
       <div class="slot">
-        <p class="hint v rise" id="hint">Встаньте рядом</p>
         <button class="btn primary v rise" id="btn-start" type="button">Старт</button>
         <div class="scanbar v" id="scanbar">
           <div class="tug" id="tug"><div class="tug-track"><i class="tug-l"></i><i class="tug-r"></i></div><div class="tug-knob"></div></div>

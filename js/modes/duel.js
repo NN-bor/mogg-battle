@@ -25,6 +25,10 @@ const T = {
 };
 
 const SIDE_NAME = { L: 'слева', R: 'справа' };
+const ATTRACT = {
+  empty: { title: 'Кто кого?', sub: 'Встаньте вдвоём в овалы' },
+  solo: { title: 'Кто против?', sub: 'Второй игрок — в свободный овал' },
+};
 
 export function createDuelMode({ bus, settings, slots, players, record }) {
   let series = { L: 0, R: 0 };
@@ -41,7 +45,7 @@ export function createDuelMode({ bus, settings, slots, players, record }) {
   const present = () => SIDES.filter((s) => slots[s].present).length;
   const stable = () => SIDES.every((s) => slots[s].present && slots[s].presentFor >= T.stable);
   const lost = () => SIDES.some((s) => slots[s].missingFor > T.lost);
-  const hint = () => bus.emit('hint', { text: present() === 1 ? 'Нужен второй игрок' : 'Встаньте рядом' });
+  const attract = () => bus.emit('attract', present() === 1 ? ATTRACT.solo : ATTRACT.empty);
 
   function setSeries(L, R) {
     series = { L, R };
@@ -117,9 +121,9 @@ export function createDuelMode({ bus, settings, slots, players, record }) {
       off: {},
 
       idle: {
-        enter: hint,
+        enter: attract,
         frame(now) {
-          hint();
+          attract();
           syncPair();
           if (stable()) fsm.go('ready');
           trackEmpty(now, T.emptyReset, () => (series.L || series.R || streak.L || streak.R) && resetPair());

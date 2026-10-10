@@ -34,12 +34,13 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
   let result = null;
   let resultAt = 0;
   let scanStart = 0;
+  let frozen = null; // result freeze-frame: the loser's eye corners as they were on the hit
   let last = performance.now();
 
   bus.on('state', ({ to }) => {
     state = to;
     stateAt = performance.now();
-    if (to !== 'result') result = null;
+    if (to !== 'result') result = frozen = null;
     if (to === 'idle' || to === 'ready') meta = null;
   });
   bus.on('round:meta', (m) => (meta = m));
@@ -104,33 +105,62 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
   }
   const along = (a, d, k) => [a[0] + d[0] * k, a[1] + d[1] * k];
 
-  // ───── idle guides ─────
+  // ───── idle guides: two ovals to stand in ─────
+  // An empty oval scans for a face. With nobody around, a ghost MOGGED! band stamps across
+  // one of them now and then, so passers-by get the joke before anyone plays.
+  const SEEK = { every: 2600, ms: 1500 };
+  const GHOST = { cycle: 5200, at: 1500, hold: 2600, out: 300 };
   const guides = {
-    L: { cx: 0, cy: 0, rx: 0, ry: 0, a: 0, init: false },
-    R: { cx: 0, cy: 0, rx: 0, ry: 0, a: 0, init: false },
+    L: { cx: 0, cy: 0, rx: 0, ry: 0, a: 0, e: 1, init: false },
+    R: { cx: 0, cy: 0, rx: 0, ry: 0, a: 0, e: 1, init: false },
   };
-  function drawGuides(dt, fade) {
+  function drawGuides(dt, fade, now) {
     const vh = view.vh;
+    const k = expAlpha(dt, 140);
+    const t = now - stateAt;
+    const n = Math.floor(t / GHOST.cycle);
+    const gt = (t % GHOST.cycle) - GHOST.at;
+    const ghostSide = state === 'idle' && gt >= 0 && gt < GHOST.hold + GHOST.out ? SIDES[n % 2] : null;
     for (const side of SIDES) {
       const g = guides[side];
       const sm = smooth[side];
-      let t;
-      if (sm.has && sm.vis > 0.5) {
+      const taken = sm.has && sm.vis > 0.5;
+      let to;
+      if (taken) {
         const b = boxOf(sm);
-        t = { cx: b.cx, cy: b.cy, rx: b.w * 0.62, ry: b.h * 0.6, a: 0.95 };
+        to = { cx: b.cx, cy: b.cy, rx: b.w * 0.62, ry: b.h * 0.6, a: 0.95, e: 0 };
       } else {
-        t = { cx: view.cw * (side === 'L' ? 0.36 : 0.64), cy: view.ch * 0.42, rx: 10.5 * vh, ry: 14.5 * vh, a: 0.42 };
+        to = { cx: view.cw * (side === 'L' ? 0.36 : 0.64), cy: view.ch * 0.42, rx: 10.5 * vh, ry: 14.5 * vh, a: 0.55, e: 1 };
       }
-      if (!g.init) Object.assign(g, t, { init: true });
-      const k = expAlpha(dt, 140);
-      for (const key of ['cx', 'cy', 'rx', 'ry', 'a']) g[key] += (t[key] - g[key]) * k;
+      if (!g.init) Object.assign(g, to, { init: true });
+      for (const key of ['cx', 'cy', 'rx', 'ry', 'a', 'e']) g[key] += (to[key] - g[key]) * k;
       ctx.globalAlpha = g.a * fade;
       ctx.strokeStyle = WHITE;
       ctx.lineWidth = LW;
       ctx.beginPath();
       ctx.ellipse(g.cx, g.cy, Math.max(1, g.rx), Math.max(1, g.ry), 0, 0, Math.PI * 2);
       ctx.stroke();
+      const st = t % SEEK.every;
+      if (state === 'idle' && g.e > 0.01 && st < SEEK.ms && side !== ghostSide) drawSeek(g, st / SEEK.ms, fade * g.e);
     }
+    if (ghostSide) {
+      const g = guides[ghostSide];
+      const out = gt < GHOST.hold ? 1 : 1 - (gt - GHOST.hold) / GHOST.out;
+      const y = g.cy - g.ry * 0.1;
+      const alpha = fade * out * Math.min(guides.L.e, guides.R.e);
+      if (alpha > 0.01) drawBand(ghostSide, [g.cx - g.rx * 0.62, y], [g.cx + g.rx * 0.62, y], alpha, gt);
+    }
+  }
+
+  // A scan line sweeping down inside an empty oval.
+  function drawSeek(g, p, alpha) {
+    const y = g.cy - g.ry + 2 * g.ry * p;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(g.cx, g.cy, Math.max(1, g.rx), Math.max(1, g.ry), 0, 0, Math.PI * 2);
+    ctx.clip();
+    stroke([[g.cx - g.rx, y], [g.cx + g.rx, y]], WHITE, alpha * 0.9 * Math.sin(Math.PI * p), Math.max(1.5, view.vh * 0.14));
+    ctx.restore();
   }
 
   // ───── brackets ─────
@@ -241,9 +271,10 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
   }
 
   // ───── result: a black band across the loser's eyes, MOGGED! in red wide caps ─────
-  function drawStrike(side, sm, t) {
+  // ro, lo: the outer eye corners in canvas px. midX: the screen's centre line in the same
+  // coordinates; the band never crosses into the other player's half.
+  function drawBand(side, ro, lo, alpha, t, midX = view.cw / 2) {
     const vh = view.vh;
-    const ro = P(sm, IDX.rOuter), lo = P(sm, IDX.lOuter);
     let d = unit(sub(lo, ro));
     if (d[0] < 0) d = [-d[0], -d[1]]; // the word always reads left to right
     const span = len(sub(lo, ro));
@@ -254,9 +285,9 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     if ('fontStretch' in ctx) ctx.fontStretch = 'expanded';
     ctx.letterSpacing = '0px';
     const m = ctx.measureText(WORD);
-    // Long enough for the word with margins, centered on the eyes, never into the other half.
+    // Long enough for the word with margins, centered on the eyes.
     const reach = Math.max(span * 1.7, m.width / 2 + thick * 0.6, 18 * vh);
-    const toCenter = side === 'L' ? view.cw / 2 - c[0] : c[0] - view.cw / 2;
+    const toCenter = side === 'L' ? midX - c[0] : c[0] - midX;
     const inward = clamp(toCenter / Math.max(d[0], 0.3) - 1.5 * vh, span * 0.9, reach);
     const left = side === 'L' ? reach : inward;
     const right = side === 'L' ? inward : reach;
@@ -264,20 +295,20 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     ctx.save();
     ctx.translate(c[0], c[1]);
     ctx.rotate(Math.atan2(d[1], d[0]));
-    // The band wipes in left to right (220 ms), then the word slams in.
-    ctx.globalAlpha = sm.vis;
+    // The band wipes in left to right (180 ms), the word slams in on top.
+    ctx.globalAlpha = alpha;
     ctx.fillStyle = BAND;
-    ctx.fillRect(-left, -thick / 2, (left + right) * progress(t, 0, 220), thick);
+    ctx.fillRect(-left, -thick / 2, (left + right) * progress(t, 0, 180), thick);
 
-    const k = clamp((t - 120) / 160);
+    const k = clamp((t - 80) / 140);
     if (k > 0) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'alphabetic';
       const x = clamp(0, -left + m.width / 2 + thick * 0.45, right - m.width / 2 - thick * 0.45);
       ctx.translate(x, 0);
-      const s = lerp(1.25, 1, progress(t - 120, 0, 220));
+      const s = lerp(1.3, 1, progress(t - 80, 0, 220));
       ctx.scale(s, s);
-      ctx.globalAlpha = sm.vis * k;
+      ctx.globalAlpha = alpha * k;
       ctx.fillStyle = MOG;
       // Optical centering on the cap height (no descenders in the word).
       ctx.fillText(WORD, 0, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
@@ -285,7 +316,22 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     ctx.restore();
   }
 
-  function draw(now) {
+  // ───── result freeze-frame (see still.js) ─────
+  // The band is drawn on the pose of the frozen frame, through the still's zoom and shake.
+  function freeze(res) {
+    frozen = {};
+    for (const s of SIDES) {
+      const sm = smooth[s];
+      if (sm.has) frozen[s] = { ro: P(sm, IDX.rOuter), lo: P(sm, IDX.lOuter), vis: sm.vis };
+    }
+    // Where to punch in: the loser's eyes; on a draw, between both players.
+    const focus = (s) => frozen[s] && mid(frozen[s].ro, frozen[s].lo);
+    const pts = (res.draw ? SIDES : [res.loser]).map(focus).filter(Boolean);
+    if (!pts.length) return [view.cw / 2, view.ch * 0.42];
+    return [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
+  }
+
+  function draw(now, cam = null) {
     const dt = clamp(now - last, 0, 100);
     last = now;
     for (const side of SIDES) updateSmooth(smooth[side], slots[side], dt, now);
@@ -298,9 +344,9 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     const inState = progress(now, stateAt, 420);
     const faces = SIDES.filter((s) => smooth[s].has);
 
-    if (state === 'idle') drawGuides(dt, 1);
+    if (state === 'idle') drawGuides(dt, 1, now);
     if (state === 'ready') {
-      drawGuides(dt, 1 - inState);
+      drawGuides(dt, 1 - inState, now);
       for (const s of faces) drawBrackets(smooth[s], inState, WHITE, 0.9 * smooth[s].vis);
     }
     if (state === 'meta' || state === 'countdown') {
@@ -328,12 +374,23 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
       }
     }
     if (state === 'result' && result) {
+      const t = now - resultAt;
       const losers = result.draw ? SIDES : [result.loser];
-      for (const s of losers) if (smooth[s].has) drawStrike(s, smooth[s], now - resultAt);
+      if (frozen && cam) {
+        ctx.setTransform(cam.a, 0, 0, cam.a, cam.e, cam.f);
+        const midX = (view.cw / 2 - cam.e) / cam.a;
+        for (const s of losers) if (frozen[s]) drawBand(s, frozen[s].ro, frozen[s].lo, frozen[s].vis, t, midX);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      } else {
+        for (const s of losers) {
+          const sm = smooth[s];
+          if (sm.has) drawBand(s, P(sm, IDX.rOuter), P(sm, IDX.lOuter), sm.vis, t);
+        }
+      }
     }
     ctx.globalAlpha = 1;
   }
 
   // pointCam: stabilized landmark in camera coordinates (diagnostics, jitter tests).
-  return { draw, smooth, pointCam: (side, i) => stab[side].point(i) };
+  return { draw, smooth, freeze, thaw: () => (frozen = null), pointCam: (side, i) => stab[side].point(i) };
 }

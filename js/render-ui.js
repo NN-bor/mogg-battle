@@ -5,18 +5,20 @@ import { SIDES } from './assign.js';
 // DOM layer. Listens to bus events only; knows nothing about how a round is run.
 
 const EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+// Result: the frozen frame stays clean this long before the buttons come in (it gets filmed).
+const RESULT_HOLD = 2500;
 
 // Which elements are visible in which state. Everything else fades out.
 const VISIBLE = {
   boot: ['screen'],
   nocamera: ['screen'],
-  idle: ['hint', 'record'],
+  idle: ['attract', 'record'],
   ready: ['start', 'record'],
   meta: ['chip'],
   countdown: ['cards'],
   scan: ['cards', 'scanbar'],
   reveal: ['cards', 'scanbar'],
-  result: ['cards', 'actions'],
+  result: ['cards'],
 };
 
 export function createUI({ root, bus }) {
@@ -25,10 +27,11 @@ export function createUI({ root, bus }) {
 
   const r = {
     cards: bySide('.card'),
-    dims: bySide('.half-dim'),
     series: $('#series'),
     seriesNum: { L: $('#series [data-side="L"]'), R: $('#series [data-side="R"]') },
-    hint: $('#hint'),
+    attract: $('#attract'),
+    attractTitle: $('#attract .attract-title'),
+    attractSub: $('#attract .attract-sub'),
     start: $('#btn-start'),
     scanbar: $('#scanbar'),
     progressBar: $('#progress i'),
@@ -64,7 +67,7 @@ export function createUI({ root, bus }) {
 
   const groups = {
     screen: [r.screen],
-    hint: [r.hint],
+    attract: [r.attract],
     start: [r.start],
     chip: [r.chip],
     cards: [r.cards.L, r.cards.R],
@@ -77,6 +80,7 @@ export function createUI({ root, bus }) {
   let state = 'boot';
   let noticeTimer = 0;
   let noticeSticky = false;
+  let holdTimer = 0;
 
   const setVisible = (name, on) =>
     groups[name].forEach((node) => node.classList.toggle('on', on && (name !== 'record' || hasRecord)));
@@ -106,16 +110,12 @@ export function createUI({ root, bus }) {
     for (const side of SIDES) {
       cancelAnimationFrame(score[side].anim);
       r.cards[side].classList.remove('locked', 'win', 'lose');
-      r.dims[side].classList.remove('on');
       show(side, NaN);
     }
   }
 
   function clearResult() {
-    for (const side of SIDES) {
-      r.cards[side].classList.remove('win', 'lose');
-      r.dims[side].classList.remove('on');
-    }
+    for (const side of SIDES) r.cards[side].classList.remove('win', 'lose');
   }
 
   bus.on('state', ({ to }) => {
@@ -125,12 +125,15 @@ export function createUI({ root, bus }) {
     const vis = VISIBLE[to] || [];
     for (const name of Object.keys(groups)) setVisible(name, vis.includes(name));
     if (to !== 'result') clearResult();
+    clearTimeout(holdTimer);
+    if (to === 'result') holdTimer = setTimeout(() => state === 'result' && setVisible('actions', true), RESULT_HOLD);
     if (to === 'meta' || to === 'idle' || to === 'ready') resetCards();
     if (to !== 'scan') r.progressBar.style.transform = 'scaleX(0)';
   });
 
-  bus.on('hint', ({ text }) => {
-    if (r.hint.textContent !== text) r.hint.textContent = text;
+  bus.on('attract', ({ title, sub }) => {
+    if (r.attractTitle.textContent !== title) r.attractTitle.textContent = title;
+    if (r.attractSub.textContent !== sub) r.attractSub.textContent = sub;
   });
 
   // One-line message above the action slot, e.g. after a face got lost during the scan.
@@ -204,9 +207,6 @@ export function createUI({ root, bus }) {
     if (res.winner) {
       r.cards[res.winner].classList.add('win');
       r.cards[res.loser].classList.add('lose');
-      r.dims[res.loser].classList.add('on');
-    } else {
-      for (const side of SIDES) r.dims[side].classList.add('on');
     }
   });
 
