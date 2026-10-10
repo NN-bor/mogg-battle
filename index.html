@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0A0B">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Шуточная дуэль двух лиц для интерактивной панели.">
+  <title>mog battle</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter-cyrillic-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <div id="app" data-state="boot">
+    <video id="video" muted playsinline autoplay disablepictureinpicture></video>
+    <div class="layer scrim"></div>
+    <div class="half-dim v" data-side="L"></div>
+    <div class="half-dim v" data-side="R"></div>
+    <canvas id="overlay" class="layer"></canvas>
+    <div class="win-frame v"></div>
+
+    <header class="top">
+      <div class="wordmark" id="wordmark">mog battle</div>
+      <div class="series v" id="series"><span data-side="L">0</span><i>:</i><span data-side="R">0</span></div>
+    </header>
+
+    <section class="panel v" data-side="L"></section>
+    <section class="panel v" data-side="R"></section>
+
+    <div class="mooged v" data-side="L">MOOGED</div>
+    <div class="mooged v" data-side="R">MOOGED</div>
+
+    <div class="total v" data-side="L">0</div>
+    <div class="total v" data-side="R">0</div>
+
+    <div class="chip v" id="chip">
+      <div class="chip-pill"><span class="chip-label">Мета раунда</span><span class="chip-metric"></span><span class="chip-mult"></span></div>
+      <p class="chip-hint"></p>
+    </div>
+    <div class="countdown" id="countdown"></div>
+
+    <footer class="bottom">
+      <p class="verdict v" id="verdict"></p>
+      <div class="slot">
+        <p class="hint v" id="hint">Встаньте рядом</p>
+        <button class="btn primary v" id="btn-start" type="button">Старт</button>
+        <div class="progress v" id="progress"><i></i></div>
+        <div class="pair v" id="result-actions">
+          <button class="btn primary" id="btn-rematch" type="button">Реванш</button>
+          <button class="btn secondary" id="btn-new" type="button">Новые игроки</button>
+        </div>
+      </div>
+      <p class="disclaimer">Цифры выдуманные. Только для развлечения.</p>
+    </footer>
+
+    <div class="screen v" id="screen">
+      <h1 class="screen-title"></h1>
+      <p class="screen-body"></p>
+      <div class="screen-actions">
+        <button class="btn primary" id="btn-retry" type="button">Повторить</button>
+        <button class="btn secondary" id="btn-screen-settings" type="button">Настройки</button>
+      </div>
+    </div>
+
+    <div class="sheet v" id="settings" aria-hidden="true"></div>
+    <div class="fps v" id="fps"></div>
+  </div>
+  <noscript>Нужен JavaScript.</noscript>
+</body>
+</html>

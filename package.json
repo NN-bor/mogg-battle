@@ -1,0 +1,15 @@
+{
+  "name": "mog-battle",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Шуточная дуэль двух лиц для интерактивной панели. Ванильный JS, без сборки.",
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/fetch-assets.mjs",
+    "start": "node scripts/serve.mjs --open",
+    "serve": "node scripts/serve.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

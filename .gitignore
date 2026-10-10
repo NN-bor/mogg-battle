@@ -1,0 +1,8 @@
+# Fetched by scripts/fetch-assets.mjs
+/vendor/
+/models/
+/fonts/
+
+node_modules/
+.DS_Store
+Thumbs.db

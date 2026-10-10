@@ -1,0 +1,7 @@
+# Cloudflare Pages
+/sw.js
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/*.wasm
+  Content-Type: application/wasm
