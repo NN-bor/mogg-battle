@@ -65,9 +65,3 @@ export function onTap(node, fn) {
   node.addEventListener('pointerup', (e) => end(e, true));
   node.addEventListener('pointercancel', (e) => end(e, false));
 }
-
-// Groups thousands with a narrow no-break space: 8412 → "8 412".
-export const groupThousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-
-// U+2212 minus for negative numbers, explicit plus for positive ones.
-export const signed = (v, digits = 1) => `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(digits)}`;

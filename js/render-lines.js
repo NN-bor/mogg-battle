@@ -1,23 +1,24 @@
 import { IDX, FACE_OVAL, sub, len, mid, unit } from './face.js';
 import { SIDES } from './assign.js';
-import { clamp, lerp, expAlpha, progress, signed, DEG } from './util.js';
+import { clamp, lerp, expAlpha, progress } from './util.js';
 
-// Canvas overlay: guides, brackets, measurement lines with labels, scan line, eye bars.
-// Lines come from real landmarks; only the scores are theatre.
+// Canvas overlay: guides, brackets, measurement lines, scan line, and the MOGGED strike.
+// Lines come from real landmarks; only the score is theatre.
+
+const WORD = 'MOGGED';
 
 const EYES = [
-  { outer: IDX.rOuter, inner: IDX.rInner, upper: IDX.rUpper, lower: IDX.rLower, side: 'R' },
-  { outer: IDX.lOuter, inner: IDX.lInner, upper: IDX.lUpper, lower: IDX.lLower, side: 'L' },
+  { outer: IDX.rOuter, inner: IDX.rInner },
+  { outer: IDX.lOuter, inner: IDX.lInner },
 ];
 
-export function createLineRenderer({ canvas, view, bus, settings, slots, players, getTracker }) {
+export function createLineRenderer({ canvas, view, bus, settings, slots, getTracker }) {
   const ctx = canvas.getContext('2d');
   const css = getComputedStyle(document.documentElement);
   const token = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
   const WHITE = token('--text', '#f5f5f7');
   const ACCENT = token('--accent', '#4d8dff');
-  const PANEL = token('--panel', 'rgba(10,10,11,.64)');
-  const LABEL_VH = parseFloat(token('--fs-line', '1.6vh')) || 1.6;
+  const MOG = token('--mog', '#ff3b30');
 
   let state = 'boot';
   let stateAt = 0;
@@ -26,8 +27,6 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, players
   let resultAt = 0;
   let scanStart = 0;
   let last = performance.now();
-  let exclusions = [];
-  let exclusionsVersion = -1;
 
   bus.on('state', ({ to }) => {
     state = to;
@@ -223,84 +222,6 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, players
     }
   }
 
-  // ───── labels with leaders, collision-free, ≤ 4 per face ─────
-  function refreshExclusions() {
-    if (exclusionsVersion === view.sizeVersion) return;
-    exclusionsVersion = view.sizeVersion;
-    const k = view.cw / view.sw;
-    exclusions = [...document.querySelectorAll('.panel')].map((node) => {
-      const r = node.getBoundingClientRect();
-      return { x0: r.left * k, y0: r.top * k, x1: r.right * k, y1: r.bottom * k };
-    });
-  }
-
-  function faceLabels(side, sm) {
-    const read = players[side].read;
-    if (!read) return [];
-    const p = (i) => P(sm, i);
-    const outer = side === 'L' ? -1 : 1; // toward the nearest screen edge
-    const rIsOuter = side === 'L' ? p(IDX.rGonion)[0] < p(IDX.lGonion)[0] : p(IDX.rGonion)[0] > p(IDX.lGonion)[0];
-
-    const ro = p(IDX.rOuter), lo = p(IDX.lOuter);
-    const ed = unit(sub(lo, ro));
-    const span = len(sub(lo, ro));
-    let eyeAngle = Math.atan2(lo[1] - ro[1], lo[0] - ro[0]) * DEG;
-    if (eyeAngle > 90) eyeAngle -= 180;
-    if (eyeAngle < -90) eyeAngle += 180;
-    const eyeEnd = rIsOuter ? along(ro, ed, -span * 0.24) : along(lo, ed, span * 0.24);
-
-    // Placement order is priority: under collisions the last ones are dropped first.
-    const labels = [];
-    for (const e of EYES) {
-      const o = p(e.outer), i = p(e.inner);
-      const away = Math.sign(o[0] - i[0]) || outer;
-      labels.push({ text: `CT ${signed(e.side === 'R' ? read.ctR : read.ctL)}°`, anchor: o, dir: [0.45 * away, -1] });
-    }
-    const g = rIsOuter ? p(IDX.rGonion) : p(IDX.lGonion);
-    labels.push({ text: `JAW ${Math.round(rIsOuter ? read.jawR : read.jawL)}°`, anchor: g, dir: [outer, 0.55] });
-    labels.push({ text: `EYE ${Math.abs(eyeAngle).toFixed(1)}°`, anchor: eyeEnd, dir: [outer, -0.2] });
-    return labels.slice(0, 4);
-  }
-
-  function drawLabels(groups) {
-    const vh = view.vh;
-    const fontPx = Math.round(LABEL_VH * vh);
-    ctx.font = `500 ${fontPx}px "JetBrains Mono", ui-monospace, monospace`;
-    ctx.textBaseline = 'middle';
-    const padX = 0.6 * vh, padY = 0.42 * vh, leader = 2.6 * vh, gap = 0.5 * vh;
-    const placed = exclusions.slice();
-    const minY = 9 * vh, maxY = 73 * vh;
-    const hits = (b) => placed.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
-
-    for (const { list, alpha } of groups) for (const lab of list) {
-      const w = ctx.measureText(lab.text).width + padX * 2;
-      const h = fontPx + padY * 2;
-      let chosen = null;
-      for (const turn of [0, -0.45, 0.45, -0.9, 0.9]) {
-        const c = Math.cos(turn), s = Math.sin(turn);
-        const d = unit([lab.dir[0] * c - lab.dir[1] * s, lab.dir[0] * s + lab.dir[1] * c]);
-        const end = along(lab.anchor, d, leader);
-        const x0 = d[0] >= 0 ? end[0] + gap : end[0] - gap - w;
-        const box = { x0, y0: end[1] - h / 2, x1: x0 + w, y1: end[1] + h / 2, end, d };
-        if (box.x0 < 2 * vh || box.x1 > view.cw - 2 * vh || box.y0 < minY || box.y1 > maxY) continue;
-        if (hits(box)) continue;
-        chosen = box;
-        break;
-      }
-      if (!chosen) continue;
-      placed.push(chosen);
-      const start = along(lab.anchor, chosen.d, 0.7 * vh);
-      stroke([start, chosen.end], WHITE, alpha * 0.7, Math.max(1, LW * 0.7));
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = PANEL;
-      ctx.beginPath();
-      ctx.roundRect(chosen.x0, chosen.y0, chosen.x1 - chosen.x0, chosen.y1 - chosen.y0, 0.5 * vh);
-      ctx.fill();
-      ctx.fillStyle = WHITE;
-      ctx.fillText(lab.text, chosen.x0 + padX, (chosen.y0 + chosen.y1) / 2 + 0.06 * fontPx);
-    }
-  }
-
   // ───── scan line ─────
   function drawScanLine(sm, now, alpha) {
     const b = boxOf(sm);
@@ -311,32 +232,57 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, players
     stroke([[b.x0 - b.w * 0.18, y], [b.x1 + b.w * 0.18, y]], WHITE, alpha * 0.85 * fade, Math.max(1, view.vh * 0.093));
   }
 
-  // ───── result: eye bars on the loser ─────
-  function drawEyeBars(sm, p) {
+  // ───── result: the loser's eyes struck through, MOGGED on the strike ─────
+  function drawStrike(side, sm, t) {
+    const vh = view.vh;
+    const ro = P(sm, IDX.rOuter), lo = P(sm, IDX.lOuter);
+    let d = unit(sub(lo, ro));
+    if (d[0] < 0) d = [-d[0], -d[1]]; // the word always reads left to right
+    const span = len(sub(lo, ro));
+    const c = mid(ro, lo);
+    const thick = Math.max(span * 0.46, 5.6 * vh);
+    // Reach well past the face, but never into the other player's half.
+    const reach = Math.max(span * 1.7, 20 * vh);
+    const toCenter = side === 'L' ? view.cw / 2 - c[0] : c[0] - view.cw / 2;
+    const inward = clamp(toCenter / Math.max(d[0], 0.3) - 1.5 * vh, span * 0.9, reach);
+    const left = side === 'L' ? reach : inward;
+    const right = side === 'L' ? inward : reach;
+
+    ctx.save();
+    ctx.translate(c[0], c[1]);
+    ctx.rotate(Math.atan2(d[1], d[0]) - 0.09); // a slight diagonal, like a pen stroke
+    // The stroke is drawn left to right in 240 ms.
     ctx.globalAlpha = sm.vis;
-    ctx.fillStyle = '#000';
-    for (const e of EYES) {
-      const o = P(sm, e.outer), i = P(sm, e.inner);
-      const c = mid(o, i);
-      const d = sub(o, i);
-      const w = len(d) * 1.8;
-      const h = Math.max(len(sub(P(sm, e.upper), P(sm, e.lower))) * 2.6, w * 0.44);
-      ctx.save();
-      ctx.translate(c[0], c[1] - h * 0.04);
-      ctx.rotate(Math.atan2(d[1], d[0]));
-      ctx.scale(lerp(0.2, 1, p), 1);
-      ctx.beginPath();
-      ctx.roundRect(-w / 2, -h / 2, w, h, h / 2);
-      ctx.fill();
-      ctx.restore();
+    ctx.fillStyle = MOG;
+    ctx.beginPath();
+    ctx.roundRect(-left, -thick / 2, (left + right) * progress(t, 0, 240), thick, thick * 0.14);
+    ctx.fill();
+
+    const k = clamp((t - 150) / 200);
+    if (k > 0) {
+      const fs = Math.round(thick * 0.62);
+      ctx.font = `900 ${fs}px Inter, system-ui, sans-serif`;
+      ctx.letterSpacing = `${Math.round(fs * 0.08)}px`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      const w = ctx.measureText(WORD).width;
+      // Centered on the face, but kept inside the stroke.
+      const x = clamp(0, -left + w / 2 + thick * 0.4, right - w / 2 - thick * 0.4);
+      const s = lerp(1.2, 1, progress(t - 150, 0, 260));
+      ctx.translate(x + fs * 0.04, 0);
+      ctx.scale(s, s);
+      ctx.globalAlpha = sm.vis * k;
+      ctx.fillStyle = WHITE;
+      ctx.fillText(WORD, 0, fs * 0.36); // cap height ≈ 0.73 em: baseline at +half of it
+      ctx.letterSpacing = '0px';
     }
+    ctx.restore();
   }
 
   function draw(now) {
     const dt = clamp(now - last, 0, 100);
     last = now;
     for (const side of SIDES) updateSmooth(smooth[side], slots[side], dt);
-    refreshExclusions();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, view.cw, view.ch);
     LW = Math.max(1, view.vh * 0.139); // 1.5 px at 1080p
@@ -356,15 +302,12 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, players
     }
     if (state === 'scan' || state === 'reveal') {
       const a = state === 'scan' ? progress(now, scanStart, 420) : lerp(1, 0.55, inState);
-      const groups = [];
       for (const s of faces) {
         const vis = smooth[s].vis;
         drawBrackets(smooth[s], 1, meta?.key === 'AURA' ? ACCENT : WHITE, 0.9 * vis);
         drawFaceLines(smooth[s], a * vis);
         if (state === 'scan') drawScanLine(smooth[s], now, vis);
-        groups.push({ list: faceLabels(s, smooth[s]), alpha: a * vis });
       }
-      drawLabels(groups);
     }
     // Diagnostics (with the FPS overlay on): the detector tiles, one per player.
     const tr = getTracker?.();
@@ -379,9 +322,8 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, players
       }
     }
     if (state === 'result' && result) {
-      const p = progress(now, resultAt, 180);
       const losers = result.draw ? SIDES : [result.loser];
-      for (const s of losers) if (smooth[s].has) drawEyeBars(smooth[s], p);
+      for (const s of losers) if (smooth[s].has) drawStrike(s, smooth[s], now - resultAt);
     }
     ctx.globalAlpha = 1;
   }

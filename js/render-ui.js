@@ -1,4 +1,4 @@
-import { METRICS, BY_KEY } from './score.js';
+import { scoreText } from './score.js';
 import { el, onTap, ease, clamp } from './util.js';
 import { SIDES } from './assign.js';
 
@@ -13,25 +13,19 @@ const VISIBLE = {
   idle: ['hint'],
   ready: ['start'],
   meta: ['chip'],
-  countdown: ['panels'],
-  scan: ['panels', 'progress'],
-  reveal: ['panels'],
-  result: ['panels', 'totals', 'actions', 'verdict'],
+  countdown: ['cards'],
+  scan: ['cards', 'progress'],
+  reveal: ['cards'],
+  result: ['cards', 'actions'],
 };
-
-const CHECK_SVG =
-  '<svg class="check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8.6 6.4 11.6 12.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 export function createUI({ root, bus }) {
   const $ = (sel) => root.querySelector(sel);
   const bySide = (sel) => Object.fromEntries(SIDES.map((s) => [s, $(`${sel}[data-side="${s}"]`)]));
 
   const r = {
-    panels: bySide('.panel'),
-    totals: bySide('.total'),
-    mooged: bySide('.mooged'),
+    cards: bySide('.card'),
     dims: bySide('.half-dim'),
-    frame: $('.win-frame'),
     series: $('#series'),
     seriesNum: { L: $('#series [data-side="L"]'), R: $('#series [data-side="R"]') },
     hint: $('#hint'),
@@ -39,88 +33,66 @@ export function createUI({ root, bus }) {
     progress: $('#progress'),
     progressBar: $('#progress i'),
     actions: $('#result-actions'),
-    verdict: $('#verdict'),
+    notice: $('#notice'),
     chip: $('#chip'),
-    chipMetric: $('#chip .chip-metric'),
-    chipMult: $('#chip .chip-mult'),
     chipHint: $('#chip .chip-hint'),
+    chipMult: $('#chip .chip-mult'),
     countdown: $('#countdown'),
     screen: $('#screen'),
     screenTitle: $('#screen .screen-title'),
     screenBody: $('#screen .screen-body'),
     fps: $('#fps'),
   };
-
-  // Build metric rows once.
-  const rows = { L: {}, R: {} };
-  for (const side of SIDES) {
-    for (const m of METRICS) {
-      const tag = el('em');
-      const value = el('b', { text: '—' });
-      const valueBox = el('span', { class: 'value' });
-      valueBox.innerHTML = CHECK_SVG;
-      valueBox.append(value);
-      const row = el('div', { class: 'row', 'data-key': m.key }, [el('span', { class: 'label' }, [m.label, tag]), valueBox]);
-      r.panels[side].append(row);
-      rows[side][m.key] = { row, value, tag };
-    }
-  }
+  const score = Object.fromEntries(SIDES.map((s) => [s, { num: r.cards[s].querySelector('.card-score b'), bar: r.cards[s].querySelector('.card-bar i'), shown: NaN, anim: 0 }]));
 
   const groups = {
     screen: [r.screen],
     hint: [r.hint],
     start: [r.start],
     chip: [r.chip],
-    panels: [r.panels.L, r.panels.R],
+    cards: [r.cards.L, r.cards.R],
     progress: [r.progress],
-    totals: [r.totals.L, r.totals.R],
     actions: [r.actions],
-    verdict: [r.verdict],
   };
-  for (const node of [r.hint, r.start, r.progress, r.actions, r.verdict]) node.classList.add('rise');
 
   let state = 'boot';
   let noticeTimer = 0;
-  let countAnim = 0;
+  let noticeSticky = false;
 
-  function setVisible(name, on) {
-    for (const node of groups[name]) node.classList.toggle('on', on);
+  const setVisible = (name, on) => groups[name].forEach((node) => node.classList.toggle('on', on));
+
+  function show(side, value) {
+    const s = score[side];
+    s.shown = value;
+    const text = scoreText(value);
+    if (s.num.textContent !== text) s.num.textContent = text;
+    s.bar.style.transform = `scaleX(${Number.isFinite(value) ? clamp(value / 10).toFixed(4) : 0})`;
   }
 
-  function clearResult() {
-    r.frame.classList.remove('on');
+  function resetCards() {
     for (const side of SIDES) {
+      cancelAnimationFrame(score[side].anim);
+      r.cards[side].classList.remove('locked', 'win', 'lose');
       r.dims[side].classList.remove('on');
-      r.mooged[side].classList.remove('on');
-      r.totals[side].classList.remove('win');
-      for (const m of METRICS) rows[side][m.key].row.classList.remove('best');
+      show(side, NaN);
     }
   }
 
-  function resetRows() {
+  function clearResult() {
     for (const side of SIDES) {
-      for (const m of METRICS) {
-        const cell = rows[side][m.key];
-        cell.row.classList.remove('locked', 'best');
-        cell.value.textContent = '—';
-        cell.tag.textContent = '';
-      }
-      r.totals[side].textContent = '0';
+      r.cards[side].classList.remove('win', 'lose');
+      r.dims[side].classList.remove('on');
     }
   }
 
   bus.on('state', ({ to }) => {
     state = to;
+    if (noticeSticky) hideNotice();
     root.dataset.state = to;
     const vis = VISIBLE[to] || [];
-    for (const name of Object.keys(groups)) {
-      if (name === 'totals') continue; // totals appear on round:totals
-      if (name === 'verdict' && to !== 'result' && noticeTimer) continue; // a notice is still on screen
-      setVisible(name, vis.includes(name));
-    }
-    if (!vis.includes('totals')) setVisible('totals', false);
+    for (const name of Object.keys(groups)) setVisible(name, vis.includes(name));
     if (to !== 'result') clearResult();
-    if (to === 'meta') resetRows();
+    if (to === 'meta' || to === 'idle' || to === 'ready') resetCards();
     if (to !== 'scan') r.progressBar.style.transform = 'scaleX(0)';
   });
 
@@ -128,22 +100,25 @@ export function createUI({ root, bus }) {
     if (r.hint.textContent !== text) r.hint.textContent = text;
   });
 
-  // One-line message, e.g. after a face got lost during the scan.
+  // One-line message above the action slot, e.g. after a face got lost during the scan.
+  // ms = 0 keeps it until the state changes (e.g. "Ничья" on the result screen).
   bus.on('notice', ({ text, ms = 2600 }) => {
     clearTimeout(noticeTimer);
-    r.verdict.textContent = text;
-    setVisible('verdict', true);
-    noticeTimer = setTimeout(() => {
-      noticeTimer = 0;
-      if (state !== 'result') setVisible('verdict', false);
-    }, ms);
+    noticeSticky = !ms;
+    r.notice.textContent = text;
+    r.notice.classList.add('on');
+    if (ms) noticeTimer = setTimeout(hideNotice, ms);
   });
+  function hideNotice() {
+    clearTimeout(noticeTimer);
+    noticeSticky = false;
+    r.notice.classList.remove('on');
+  }
 
-  bus.on('round:meta', ({ key, label, mult, hint }) => {
-    r.chipMetric.textContent = label;
-    r.chipMult.textContent = `×${mult % 1 ? mult.toFixed(1) : mult}`;
+  bus.on('round:meta', ({ hint, mult }) => {
+    hideNotice();
     r.chipHint.textContent = hint;
-    for (const side of SIDES) rows[side][key].tag.textContent = `×${mult % 1 ? mult.toFixed(1) : mult}`;
+    r.chipMult.textContent = `×${mult % 1 ? mult.toFixed(1) : mult}`;
   });
 
   bus.on('round:countdown', ({ n, ms = 1000 }) => {
@@ -151,10 +126,10 @@ export function createUI({ root, bus }) {
     r.countdown.replaceChildren(digit);
     digit.animate(
       [
-        { opacity: 0, transform: 'scale(1.06)' },
-        { opacity: 1, transform: 'scale(1)', offset: 0.22 },
+        { opacity: 0, transform: 'scale(1.08)' },
+        { opacity: 1, transform: 'scale(1)', offset: 0.2 },
         { opacity: 1, transform: 'scale(1)', offset: 0.7 },
-        { opacity: 0, transform: 'scale(0.98)' },
+        { opacity: 0, transform: 'scale(0.96)' },
       ],
       { duration: ms * 0.96, easing: EASING, fill: 'forwards' }
     );
@@ -164,68 +139,43 @@ export function createUI({ root, bus }) {
     r.progressBar.style.transform = `scaleX(${clamp(p).toFixed(4)})`;
   });
 
-  bus.on('metrics:live', (live) => {
+  bus.on('score:live', (live) => {
     for (const side of SIDES) {
-      const values = live[side];
-      if (!values) continue;
-      for (const m of METRICS) {
-        const cell = rows[side][m.key];
-        if (cell.row.classList.contains('locked')) continue;
-        const text = values[m.key] ?? '—';
-        if (cell.value.textContent !== text) cell.value.textContent = text;
-      }
+      if (r.cards[side].classList.contains('locked') || !(side in live)) continue;
+      show(side, live[side]);
     }
   });
 
-  bus.on('round:lock', ({ key, text }) => {
-    for (const side of SIDES) {
-      const cell = rows[side][key];
-      cell.value.textContent = text[side];
-      cell.row.classList.add('locked');
-    }
-  });
-
-  bus.on('round:totals', ({ L, R, ms = 800 }) => {
-    cancelAnimationFrame(countAnim);
-    setVisible('totals', true);
+  // Lock: the running number glides to its final value, then a small pop.
+  bus.on('round:lock', ({ side, score: target, ms = 380 }) => {
+    const s = score[side];
+    cancelAnimationFrame(s.anim);
+    r.cards[side].classList.add('locked');
+    const from = Number.isFinite(s.shown) ? s.shown : target;
     const start = performance.now();
-    const target = { L, R };
     const step = (now) => {
       const p = ease(clamp((now - start) / ms));
-      for (const side of SIDES) r.totals[side].textContent = String(Math.round(target[side] * p));
-      if (p < 1) countAnim = requestAnimationFrame(step);
+      show(side, from + (target - from) * p);
+      if (p < 1) s.anim = requestAnimationFrame(step);
+      else show(side, target);
     };
-    countAnim = requestAnimationFrame(step);
+    s.anim = requestAnimationFrame(step);
+    s.num.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)', offset: 0.35 }, { transform: 'scale(1)' }], {
+      duration: 420,
+      easing: EASING,
+    });
   });
 
   bus.on('round:result', (res) => {
-    clearTimeout(noticeTimer);
-    noticeTimer = 0;
-    const losers = res.draw ? SIDES : [res.loser];
+    hideNotice();
     if (res.winner) {
-      r.frame.dataset.side = res.winner;
-      r.frame.classList.add('on');
-      r.totals[res.winner].classList.add('win');
+      r.cards[res.winner].classList.add('win');
+      r.cards[res.loser].classList.add('lose');
+      r.dims[res.loser].classList.add('on');
+    } else {
+      for (const side of SIDES) r.dims[side].classList.add('on');
+      bus.emit('notice', { text: 'Ничья', ms: 0 });
     }
-    for (const side of losers) {
-      r.dims[side].classList.add('on');
-      r.mooged[side].classList.add('on');
-      // Short glitch, one flash only (well under 3 flashes per second).
-      r.mooged[side].animate(
-        [
-          { transform: 'translateX(-1.4vh)', opacity: 0 },
-          { transform: 'translateX(1vh)', opacity: 1, offset: 0.2 },
-          { transform: 'translateX(-0.6vh) skewX(-4deg)', offset: 0.45 },
-          { transform: 'translateX(0.3vh)', offset: 0.7 },
-          { transform: 'none', opacity: 1 },
-        ],
-        { duration: 260, easing: 'steps(1, end)' }
-      );
-    }
-    for (const side of SIDES) rows[side][res.best[side]].row.classList.add('best');
-    r.verdict.textContent = res.winner
-      ? `mogged by ${res.verdict.label} +${res.verdict.gap}`
-      : `Разница ${(res.margin * 100).toFixed(1)}%. Оба mogged.`;
   });
 
   bus.on('series', ({ L, R }) => {
@@ -251,5 +201,5 @@ export function createUI({ root, bus }) {
   onTap($('#btn-retry'), () => bus.emit('ui:retry'));
   onTap($('#btn-screen-settings'), () => bus.emit('ui:settings'));
 
-  return { screen, setFps, rows, metricLabel: (key) => BY_KEY[key].label };
+  return { screen, setFps, get state() { return state; } };
 }

@@ -8,8 +8,8 @@ import { SIDES } from './assign.js';
 
 const MAX_CANVAS_W = 1920;
 const AUTO_MAX_ZOOM = 2.2;
-const FACE_H = 0.26;     // target face height as a share of the view height
-const PAIR_W = 0.44;     // both faces must fit in this share of the view width
+const FACE_H = 0.28;     // target face height as a share of the view height
+const PAIR_W = 0.56;     // both faces must fit in this share of the view width
 const FACE_Y = 0.42;     // vertical position of the faces in the view
 const GUIDE_X = { L: 0.36, R: 0.64 };
 const EMPTY_MS = 1500;   // nobody in frame this long → zoom back out

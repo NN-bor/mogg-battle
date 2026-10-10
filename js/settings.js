@@ -65,7 +65,7 @@ const ROWS = [
   { key: 'fps', label: 'Оверлей FPS', options: onOff },
 ];
 
-// Hidden settings sheet, opened by a 1.5 s press on the wordmark.
+// Hidden settings sheet, opened by a 1.5 s press on the empty top-left corner.
 export function createSettingsSheet({ root, settings, bus, getCameras, getStatus, version }) {
   let open = false;
   let statusTimer = 0;
@@ -140,23 +140,19 @@ export function createSettingsSheet({ root, settings, bus, getCameras, getStatus
   return { open: show, close, get isOpen() { return open; } };
 }
 
-// 1.5 s press anywhere on the target opens the sheet.
+// A 1.5 s press on the target opens the sheet.
 export function bindLongPress(target, ms, fn) {
   let timer = 0;
   const cancel = () => {
     clearTimeout(timer);
     timer = 0;
-    target.classList.remove('pressing');
-    target.classList.add('released');
   };
   target.addEventListener('pointerdown', (e) => {
     if (e.button > 0) return;
     try { target.setPointerCapture(e.pointerId); } catch {}
-    target.classList.remove('released');
-    target.classList.add('pressing');
-    clearTimeout(timer);
+    cancel();
     timer = setTimeout(() => {
-      cancel();
+      timer = 0;
       fn();
     }, ms);
   });

@@ -31,7 +31,8 @@
   --text-2: #9a9aa1;
   --hairline: rgba(255, 255, 255, 0.14);
   --panel: rgba(10, 10, 11, 0.64);
-  --accent: #4d8dff;
+  --accent: #4d8dff;   /* the winner: score, bar, tag, card outline, key line */
+  --mog: #ff3b30;      /* the loser: the strike through the eyes, nothing else */
 
   --scrim: rgba(10, 10, 11, 0.32);   /* flat darkening of the video */
   --dim: rgba(0, 0, 0, 0.4);         /* loser half */
@@ -39,23 +40,20 @@
   --font: 'Inter', system-ui, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  --fs-label: 2.2vh;
-  --fs-value: 4vh;
-  --fs-total: 14vh;
-  --fs-count: 40vh;
-  --fs-mooged: 12vh;
-  --fs-line: 1.6vh;      /* canvas labels, read by render-lines.js */
-  --fs-word: 2.8vh;
-  --fs-button: 3.2vh;
+  /* Heavy, game-like scale. Everything in vh: reads the same from 3 m on any panel. */
+  --fs-label: 2vh;     /* 700, uppercase, .1em */
+  --fs-score: 13vh;    /* 800, the one number a player sees */
+  --fs-count: 40vh;    /* 800 */
+  --fs-hint: 5vh;      /* 700 */
+  --fs-button: 3.4vh;  /* 700 */
+  --fs-chip: 4vh;      /* 800 */
   --fs-small: 1.8vh;
+  --fs-line: 1.6vh;    /* mono, diagnostics */
 
   --edge: 4vh;
   --radius: 2.4vh;
-  --row-gap: 3vh;
   --btn-h: 10vh;
-  --panel-w: 48vh;
-  --panel-top: 11vh;
-  --frame-bottom: 74vh;  /* winner frame ends above the control strip */
+  --card-w: 46vh;
 
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --t-fast: 180ms;
@@ -131,139 +129,128 @@ button:focus { outline: none; }
   pointer-events: auto;
   transition-delay: 0s;
 }
-.rise { translate: 0 1.2vh; }
+.rise { translate: 0 1.6vh; }
 .rise.on { translate: 0 0; }
 
-/* ───────────── Top bar ───────────── */
-.top {
+/* ───────────── Top: hidden settings hotspot, series ───────────── */
+.hotspot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16vh;
+  height: 12vh;
+}
+.series {
   position: absolute;
   top: var(--edge);
-  left: var(--edge);
   right: var(--edge);
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: var(--fs-word);
-  font-weight: 500;
-  line-height: 1;
-  pointer-events: none;
-}
-.wordmark {
-  pointer-events: auto;
-  letter-spacing: -0.01em;
-  padding: 2vh;
-  margin: -2vh;   /* larger touch target for the hidden long-press */
-  transition: opacity 1500ms linear;
-}
-.wordmark.pressing { opacity: 0.35; }
-.wordmark.released { transition-duration: var(--t-fast); }
-
-.series {
-  display: flex;
   gap: 1.2vh;
+  font-size: 3.4vh;
+  font-weight: 800;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
+  pointer-events: none;
 }
 .series i { font-style: normal; color: var(--text-2); }
 
-/* ───────────── Metric panels ───────────── */
-.panel {
+/* ───────────── Score cards: one number per player ───────────── */
+.card {
   position: absolute;
-  top: var(--panel-top);
-  width: var(--panel-w);
-  padding: 2.4vh 2.8vh;
+  bottom: var(--edge);
+  width: var(--card-w);
+  padding: 2.4vh 3vh 3vh;
   background: var(--panel);
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
-  display: grid;
-  row-gap: var(--row-gap);
 }
-.panel[data-side='L'] { left: var(--edge); }
-.panel[data-side='R'] { right: var(--edge); }
-
-.row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2vh;
-  height: var(--fs-value);
-}
-.row::before {
+.card[data-side='L'] { left: var(--edge); }
+.card[data-side='R'] { right: var(--edge); }
+.card::after {
   content: '';
   position: absolute;
-  inset: -1.1vh -1.4vh;
-  border: 1px solid var(--hairline);
-  border-radius: 1.2vh;
-  background: rgba(255, 255, 255, 0.05);
+  inset: -1px;
+  border: 2px solid var(--accent);
+  border-radius: inherit;
   opacity: 0;
   transition: opacity var(--t-mid) var(--ease);
 }
-.row.best::before { opacity: 1; }
-.row.best .label { color: var(--text); }
+.card.win::after { opacity: 1; }
+.card.v.on.lose { opacity: 0.55; }
 
-.label {
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  gap: 0.9vh;
-  font-size: var(--fs-label);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  white-space: nowrap;
-}
-.label em {
-  font-style: normal;
-  color: var(--text);
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.value {
-  position: relative;
+.card-head {
   display: flex;
   align-items: center;
-  gap: 1.2vh;
-  font-size: var(--fs-value);
-  font-weight: 400;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  justify-content: space-between;
+  height: 3.4vh;
 }
-.value b {
-  font-weight: 400;
-  opacity: 0.58;
-  transition: opacity var(--t-fast) var(--ease);
+.card-label {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
 }
-.row.locked .value b { opacity: 1; }
-
-.check {
-  width: 2.4vh;
-  height: 2.4vh;
-  color: var(--accent);
+.card-tag {
+  padding: 0.7vh 1.4vh;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 1.9vh;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   opacity: 0;
-  scale: 0.6;
+  scale: 0.8;
   transition: opacity var(--t-fast) var(--ease), scale var(--t-mid) var(--ease);
 }
-.row.locked .check { opacity: 1; scale: 1; }
+.card.win .card-tag { opacity: 1; scale: 1; }
 
-/* ───────────── Totals ───────────── */
-.total {
-  position: absolute;
-  bottom: calc(var(--edge) - 1.9vh); /* puts the baseline on the bottom edge line */
-  font-size: var(--fs-total);
-  font-weight: 300;
-  line-height: 1;
-  letter-spacing: -0.03em;
+.card-score {
+  display: flex;
+  align-items: baseline;
+  gap: 1.2vh;
+  margin-top: 1.4vh;
   font-variant-numeric: tabular-nums;
 }
-.total[data-side='L'] { left: calc(var(--edge) - 0.6vh); }
-.total[data-side='R'] { right: var(--edge); }
-.total.win { color: var(--accent); }
+.card-score b {
+  display: inline-block;
+  font-size: var(--fs-score);
+  font-weight: 800;
+  line-height: 0.86;
+  letter-spacing: -0.045em;
+  opacity: 0.62;
+  transform-origin: 0 100%;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.card.locked .card-score b { opacity: 1; }
+.card.win .card-score b { color: var(--accent); }
+.card-score small {
+  font-size: 3.2vh;
+  font-weight: 700;
+  color: var(--text-2);
+}
 
-/* ───────────── Result ───────────── */
+.card-bar {
+  height: 0.7vh;
+  margin-top: 2.2vh;
+  border-radius: 999px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+.card-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  transition: transform 160ms linear;
+}
+.card.locked .card-bar i { transition-duration: var(--t-slow); transition-timing-function: var(--ease); }
+.card.win .card-bar i { background: var(--accent); }
+
+/* ───────────── Result: loser half ───────────── */
 .half-dim {
   position: absolute;
   top: 0;
@@ -274,68 +261,39 @@ button:focus { outline: none; }
 .half-dim[data-side='L'] { left: 0; }
 .half-dim[data-side='R'] { right: 0; }
 
-.win-frame {
-  position: absolute;
-  top: 1.6vh;
-  height: calc(var(--frame-bottom) - 1.6vh);
-  width: calc(50% - 2.4vh);
-  border: 2px solid var(--accent);
-  border-radius: var(--radius);
-  scale: 0.985;
-}
-.win-frame.on { scale: 1; }
-.win-frame[data-side='L'] { left: 1.6vh; }
-.win-frame[data-side='R'] { right: 1.6vh; }
-
-.mooged {
-  position: absolute;
-  top: 64vh;
-  width: 50%;
-  text-align: center;
-  font-size: var(--fs-mooged);
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.12em;
-  text-indent: 0.12em; /* balances the trailing tracking */
-  translate: 0 -50%;
-}
-.mooged[data-side='L'] { left: 0; }
-.mooged[data-side='R'] { right: 0; }
-
 /* ───────────── Center: meta chip, countdown ───────────── */
 .chip {
   position: absolute;
   left: 50%;
   top: 64vh; /* below the faces, above the control strip */
   translate: -50% -50%;
-  scale: 0.96;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2.2vh;
-}
-.chip.on { scale: 1; }
-.chip-pill {
+  scale: 0.94;
   display: flex;
   align-items: center;
-  gap: 1.6vh;
-  height: 8vh;
-  padding: 0 3.6vh;
+  gap: 2vh;
+  height: 9vh;
+  padding: 0 4vh;
   border: 1px solid var(--hairline);
   border-radius: 999px;
   background: var(--panel);
   white-space: nowrap;
 }
+.chip.on { scale: 1; }
 .chip-label {
   font-size: var(--fs-label);
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-2);
 }
-.chip-metric { font-size: 3.4vh; font-weight: 500; letter-spacing: 0.02em; }
-.chip-mult { font-size: 3.4vh; font-weight: 400; font-variant-numeric: tabular-nums; }
-.chip-hint { font-size: 2.6vh; font-weight: 400; color: var(--text-2); }
+.chip-hint { font-size: var(--fs-chip); font-weight: 800; letter-spacing: -0.02em; }
+.chip-mult {
+  font-size: var(--fs-chip);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
 
 .countdown {
   position: absolute;
@@ -346,9 +304,9 @@ button:focus { outline: none; }
 }
 .countdown span {
   font-size: var(--fs-count);
-  font-weight: 200;
+  font-weight: 800;
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
   font-variant-numeric: tabular-nums;
   opacity: 0;
 }
@@ -365,18 +323,17 @@ button:focus { outline: none; }
   gap: 2vh;
   pointer-events: none;
 }
-.verdict {
+.notice {
   height: 3.6vh;
   font-size: 3vh;
-  font-weight: 500;
+  font-weight: 700;
   line-height: 1.2;
-  letter-spacing: -0.005em;
-  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .slot {
   position: relative;
-  width: 70vw;
+  width: 40vw;
   height: var(--btn-h);
 }
 .slot > * {
@@ -389,14 +346,15 @@ button:focus { outline: none; }
 .slot > .rise.on { translate: -50% -50%; }
 
 .hint {
-  font-size: 5vh;
-  font-weight: 300;
-  letter-spacing: -0.01em;
+  font-size: var(--fs-hint);
+  font-weight: 700;
+  letter-spacing: -0.02em;
   white-space: nowrap;
 }
 .progress {
   width: 30vw;
-  height: 2px;
+  height: 0.45vh;
+  border-radius: 999px;
   background: var(--hairline);
   overflow: hidden;
 }
@@ -409,13 +367,6 @@ button:focus { outline: none; }
 }
 .pair { display: flex; gap: 2vh; }
 
-.disclaimer {
-  font-size: var(--fs-small);
-  font-weight: 400;
-  color: var(--text-2);
-  line-height: 1.2;
-}
-
 /* ───────────── Buttons ───────────── */
 .btn {
   height: var(--btn-h);
@@ -423,14 +374,14 @@ button:focus { outline: none; }
   padding: 0 6vh;
   border-radius: 999px;
   font-size: var(--fs-button);
-  font-weight: 500;
-  letter-spacing: -0.005em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   transition: scale var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
 }
 .btn.primary { background: var(--text); color: var(--bg); }
 .btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--hairline); }
-.btn.pressed { scale: 0.97; opacity: 0.86; }
+.btn.pressed { scale: 0.96; opacity: 0.86; }
 .btn.small { height: 7vh; min-width: 0; padding: 0 4vh; font-size: 2.6vh; }
 
 /* ───────────── Full screens: loading, camera errors ───────────── */
@@ -446,10 +397,11 @@ button:focus { outline: none; }
   text-align: center;
   background: var(--bg);
 }
-.screen-title { font-size: 5vh; font-weight: 400; letter-spacing: -0.02em; }
+.screen-title { font-size: 5.4vh; font-weight: 800; letter-spacing: -0.03em; }
 .screen-body {
   max-width: 110vh;
   font-size: 2.6vh;
+  font-weight: 500;
   line-height: 1.45;
   color: var(--text-2);
   white-space: pre-line;
@@ -481,7 +433,7 @@ button:focus { outline: none; }
   justify-content: space-between;
   margin-bottom: 4vh;
 }
-.sheet-head h2 { font-size: 4.4vh; font-weight: 400; letter-spacing: -0.02em; }
+.sheet-head h2 { font-size: 4.4vh; font-weight: 800; letter-spacing: -0.03em; }
 .setting {
   display: grid;
   grid-template-columns: 30vh 1fr;
@@ -492,8 +444,8 @@ button:focus { outline: none; }
 }
 .setting > span {
   font-size: var(--fs-label);
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-2);
 }
@@ -507,7 +459,7 @@ button:focus { outline: none; }
   border-radius: 999px;
   border: 1px solid var(--hairline);
   font-size: 2.4vh;
-  font-weight: 500;
+  font-weight: 700;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   transition: scale var(--t-fast) var(--ease);
@@ -519,6 +471,7 @@ button:focus { outline: none; }
   padding-top: 2.4vh;
   border-top: 1px solid var(--hairline);
   font-size: var(--fs-small);
+  font-weight: 500;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }

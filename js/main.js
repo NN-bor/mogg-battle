@@ -10,7 +10,7 @@ import { createLineRenderer } from './render-lines.js';
 import { createAudio } from './audio.js';
 import { createDuelMode } from './modes/duel.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 
 const MESSAGES = {
   insecure: [
@@ -50,7 +50,7 @@ const camera = createCamera({ video, bus });
 const audio = createAudio({ bus, settings });
 const assigner = createAssigner();
 const players = { L: createPlayerMetrics(), R: createPlayerMetrics() };
-const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, players, getTracker: () => tracker });
+const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, getTracker: () => tracker });
 const mode = createDuelMode({ bus, settings, slots: assigner.slots, players });
 
 let tracker = null;
@@ -248,7 +248,8 @@ bus.on('ui:retry', () => {
   boot();
 });
 bus.on('ui:settings', () => sheet.open());
-bindLongPress(document.getElementById('wordmark'), 1500, () => sheet.open());
+// Hidden settings: hold the empty top-left corner for 1.5 s.
+bindLongPress(document.getElementById('hotspot'), 1500, () => sheet.open());
 
 // ───── kiosk hygiene: no zoom, no context menu, no text selection ─────
 for (const type of ['contextmenu', 'gesturestart', 'gesturechange', 'dblclick', 'selectstart', 'dragstart']) {

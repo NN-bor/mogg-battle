@@ -1,5 +1,5 @@
 import { createMachine } from '../fsm.js';
-import { METRICS, pickMeta, computeRound, liveText } from '../score.js';
+import { pickMeta, computeRound, liveScore } from '../score.js';
 import { SIDES } from '../assign.js';
 import { lerp } from '../util.js';
 
@@ -13,8 +13,8 @@ const T = {
   meta: 1500,
   count: 1000,      // per countdown step
   scan: 4000,
-  lock: 600,        // per metric during reveal
-  totals: 800,
+  lock: 700,        // reveal: lower score locks first, the higher one 700 ms later
+  settle: 650,      // pause after the second lock before the hit
   liveEvery: 83,    // ~12 Hz for running numbers
   emptyReset: 10000,// nobody in frame this long → series resets (new pair)
   resultIdle: 12000,// nobody in frame this long on the result screen → idle
@@ -27,7 +27,7 @@ export function createDuelMode({ bus, settings, slots, players }) {
   let round = null;
   let liveAt = 0;
   let emptySince = 0;
-  const tremor = { L: {}, R: {} };
+  const tremor = { L: 0, R: 0 };
 
   const present = () => SIDES.filter((s) => slots[s].present).length;
   const stable = () => SIDES.every((s) => slots[s].present && slots[s].presentFor >= T.stable);
@@ -56,21 +56,18 @@ export function createDuelMode({ bus, settings, slots, players }) {
     fsm.go('ready');
   }
 
+  // The single visible number runs while scanning, so players see their face move it.
   function emitLive(now) {
     if (now - liveAt < T.liveEvery) return;
     liveAt = now;
     const out = {};
     for (const side of SIDES) {
-      const pm = players[side];
-      if (!pm.q) continue;
-      const values = {};
-      for (const m of METRICS) {
-        const t = (tremor[side][m.key] = lerp(tremor[side][m.key] || 0, Math.random() * 2 - 1, 0.55));
-        values[m.key] = liveText(m.key, pm.q[m.key], pm.read.ct, t);
-      }
-      out[side] = values;
+      const score = liveScore(players[side].q, meta);
+      if (!Number.isFinite(score)) continue;
+      tremor[side] = lerp(tremor[side], Math.random() * 2 - 1, 0.55);
+      out[side] = Math.min(10, Math.max(0, score + tremor[side] * 0.05));
     }
-    bus.emit('metrics:live', out);
+    bus.emit('score:live', out);
   }
 
   const fsm = createMachine({
@@ -145,22 +142,15 @@ export function createDuelMode({ bus, settings, slots, players }) {
         enter() {
           const finals = { L: players.L.endScan(), R: players.R.endScan() };
           const res = (round.result = computeRound(finals, meta, Number(settings.get('noise')) || 0));
-          res.order.forEach((key, i) => {
-            fsm.after(T.lock * (i + 1), () =>
-              bus.emit('round:lock', {
-                key,
-                index: i,
-                isLast: i === res.order.length - 1,
-                text: { L: res.text.L[key], R: res.text.R[key] },
-              })
-            );
+          // Runner-up first, like a game show: the second number decides.
+          const order = res.scores.L <= res.scores.R ? ['L', 'R'] : ['R', 'L'];
+          order.forEach((side, i) => {
+            fsm.after(T.lock * (i + 1), () => bus.emit('round:lock', { side, score: res.scores[side], isLast: i === 1 }));
           });
-          const totalsAt = T.lock * (res.order.length + 1);
-          fsm.after(totalsAt, () => bus.emit('round:totals', { ...res.totals, ms: T.totals }));
-          fsm.after(totalsAt + T.totals + 250, () => fsm.go('result'));
+          fsm.after(T.lock * 2 + T.settle, () => fsm.go('result'));
         },
         frame(now) {
-          emitLive(now); // rows that are not locked yet keep running
+          emitLive(now); // the number that is not locked yet keeps running
         },
       },
 

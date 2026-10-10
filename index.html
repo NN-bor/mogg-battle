@@ -21,40 +21,38 @@
     <div class="half-dim v" data-side="L"></div>
     <div class="half-dim v" data-side="R"></div>
     <canvas id="overlay" class="layer"></canvas>
-    <div class="win-frame v"></div>
 
-    <header class="top">
-      <div class="wordmark" id="wordmark">mog battle</div>
-      <div class="series v" id="series"><span data-side="L">0</span><i>:</i><span data-side="R">0</span></div>
-    </header>
+    <!-- Invisible: hold 1.5 s to open settings -->
+    <div class="hotspot" id="hotspot" aria-hidden="true"></div>
+    <div class="series v" id="series"><span data-side="L">0</span><i>:</i><span data-side="R">0</span></div>
 
-    <section class="panel v" data-side="L"></section>
-    <section class="panel v" data-side="R"></section>
-
-    <div class="mooged v" data-side="L">MOOGED</div>
-    <div class="mooged v" data-side="R">MOOGED</div>
-
-    <div class="total v" data-side="L">0</div>
-    <div class="total v" data-side="R">0</div>
+    <section class="card v rise" data-side="L">
+      <div class="card-head"><span class="card-label">Слева</span><span class="card-tag">Победа</span></div>
+      <div class="card-score"><b>—</b><small>/10</small></div>
+      <div class="card-bar"><i></i></div>
+    </section>
+    <section class="card v rise" data-side="R">
+      <div class="card-head"><span class="card-label">Справа</span><span class="card-tag">Победа</span></div>
+      <div class="card-score"><b>—</b><small>/10</small></div>
+      <div class="card-bar"><i></i></div>
+    </section>
 
     <div class="chip v" id="chip">
-      <div class="chip-pill"><span class="chip-label">Мета раунда</span><span class="chip-metric"></span><span class="chip-mult"></span></div>
-      <p class="chip-hint"></p>
+      <span class="chip-label">Бонус раунда</span><span class="chip-hint"></span><span class="chip-mult"></span>
     </div>
     <div class="countdown" id="countdown"></div>
 
     <footer class="bottom">
-      <p class="verdict v" id="verdict"></p>
+      <p class="notice v rise" id="notice"></p>
       <div class="slot">
-        <p class="hint v" id="hint">Встаньте рядом</p>
-        <button class="btn primary v" id="btn-start" type="button">Старт</button>
+        <p class="hint v rise" id="hint">Встаньте рядом</p>
+        <button class="btn primary v rise" id="btn-start" type="button">Старт</button>
         <div class="progress v" id="progress"><i></i></div>
-        <div class="pair v" id="result-actions">
+        <div class="pair v rise" id="result-actions">
           <button class="btn primary" id="btn-rematch" type="button">Реванш</button>
           <button class="btn secondary" id="btn-new" type="button">Новые игроки</button>
         </div>
       </div>
-      <p class="disclaimer">Цифры выдуманные. Только для развлечения.</p>
     </footer>
 
     <div class="screen v" id="screen">
