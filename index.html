@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0A0B">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Шуточная дуэль двух лиц для интерактивной панели.">
+  <title>mog battle</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter-cyrillic-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <div id="app" data-state="boot">
+    <video id="video" muted playsinline autoplay disablepictureinpicture></video>
+    <div class="layer scrim"></div>
+    <div class="half-dim v" data-side="L"></div>
+    <div class="half-dim v" data-side="R"></div>
+    <canvas id="overlay" class="layer"></canvas>
+
+    <!-- Invisible: hold 1.5 s to open settings -->
+    <div class="hotspot" id="hotspot" aria-hidden="true"></div>
+    <div class="series v" id="series"><span data-side="L">0</span><i>:</i><span data-side="R">0</span></div>
+
+    <section class="card v rise" data-side="L">
+      <div class="card-head"><span class="card-label">Слева</span><span class="card-tag">Победа</span></div>
+      <div class="card-score"><b>—</b><small>/10</small></div>
+      <div class="card-bar"><i></i></div>
+    </section>
+    <section class="card v rise" data-side="R">
+      <div class="card-head"><span class="card-label">Справа</span><span class="card-tag">Победа</span></div>
+      <div class="card-score"><b>—</b><small>/10</small></div>
+      <div class="card-bar"><i></i></div>
+    </section>
+
+    <div class="chip v" id="chip">
+      <span class="chip-label">Бонус раунда</span><span class="chip-hint"></span><span class="chip-mult"></span>
+    </div>
+    <div class="countdown" id="countdown"></div>
+
+    <footer class="bottom">
+      <p class="notice v rise" id="notice"></p>
+      <div class="slot">
+        <p class="hint v rise" id="hint">Встаньте рядом</p>
+        <button class="btn primary v rise" id="btn-start" type="button">Старт</button>
+        <div class="progress v" id="progress"><i></i></div>
+        <div class="pair v rise" id="result-actions">
+          <button class="btn primary" id="btn-rematch" type="button">Реванш</button>
+          <button class="btn secondary" id="btn-new" type="button">Новые игроки</button>
+        </div>
+      </div>
+    </footer>
+
+    <div class="screen v" id="screen">
+      <h1 class="screen-title"></h1>
+      <p class="screen-body"></p>
+      <div class="screen-actions">
+        <button class="btn primary" id="btn-retry" type="button">Повторить</button>
+        <button class="btn secondary" id="btn-screen-settings" type="button">Настройки</button>
+      </div>
+    </div>
+
+    <div class="sheet v" id="settings" aria-hidden="true"></div>
+    <div class="fps v" id="fps"></div>
+  </div>
+  <noscript>Нужен JavaScript.</noscript>
+</body>
+</html>

@@ -1,0 +1,494 @@
+/* ───────────── Fonts (local, see scripts/fetch-assets.mjs) ───────────── */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url(../fonts/inter-latin-opsz-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url(../fonts/inter-cyrillic-opsz-normal.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url(../fonts/jetbrains-mono-latin-500-normal.woff2) format('woff2');
+}
+
+/* ───────────── Tokens ───────────── */
+:root {
+  --bg: #0a0a0b;
+  --text: #f5f5f7;
+  --text-2: #9a9aa1;
+  --hairline: rgba(255, 255, 255, 0.14);
+  --panel: rgba(10, 10, 11, 0.64);
+  --accent: #4d8dff;   /* the winner: score, bar, tag, card outline, key line */
+  --mog: #ff3b30;      /* the loser: the strike through the eyes, nothing else */
+
+  --scrim: rgba(10, 10, 11, 0.32);   /* flat darkening of the video */
+  --dim: rgba(0, 0, 0, 0.4);         /* loser half */
+
+  --font: 'Inter', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Heavy, game-like scale. Everything in vh: reads the same from 3 m on any panel. */
+  --fs-label: 2vh;     /* 700, uppercase, .1em */
+  --fs-score: 13vh;    /* 800, the one number a player sees */
+  --fs-count: 40vh;    /* 800 */
+  --fs-hint: 5vh;      /* 700 */
+  --fs-button: 3.4vh;  /* 700 */
+  --fs-chip: 4vh;      /* 800 */
+  --fs-small: 1.8vh;
+  --fs-line: 1.6vh;    /* mono, diagnostics */
+
+  --edge: 4vh;
+  --radius: 2.4vh;
+  --btn-h: 10vh;
+  --card-w: 46vh;
+
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-fast: 180ms;
+  --t-mid: 280ms;
+  --t-slow: 420ms;
+}
+
+/* ───────────── Base ───────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  cursor: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+button:focus { outline: none; }
+
+#app { position: fixed; inset: 0; overflow: hidden; background: var(--bg); }
+.layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+#video {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  opacity: 0;
+  transition: opacity var(--t-slow) var(--ease);
+}
+#video.live { opacity: 1; }
+
+.scrim { background: var(--scrim); }
+#overlay { pointer-events: none; }
+
+/* Visibility is driven from render-ui.js by toggling .on */
+.v {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--t-mid) var(--ease),
+    translate var(--t-mid) var(--ease),
+    scale var(--t-mid) var(--ease),
+    visibility 0s linear var(--t-mid);
+}
+.v.on {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+.rise { translate: 0 1.6vh; }
+.rise.on { translate: 0 0; }
+
+/* ───────────── Top: hidden settings hotspot, series ───────────── */
+.hotspot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16vh;
+  height: 12vh;
+}
+.series {
+  position: absolute;
+  top: var(--edge);
+  right: var(--edge);
+  display: flex;
+  gap: 1.2vh;
+  font-size: 3.4vh;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.series i { font-style: normal; color: var(--text-2); }
+
+/* ───────────── Score cards: one number per player ───────────── */
+.card {
+  position: absolute;
+  bottom: var(--edge);
+  width: var(--card-w);
+  padding: 2.4vh 3vh 3vh;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
+.card[data-side='L'] { left: var(--edge); }
+.card[data-side='R'] { right: var(--edge); }
+.card::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 2px solid var(--accent);
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--t-mid) var(--ease);
+}
+.card.win::after { opacity: 1; }
+.card.v.on.lose { opacity: 0.55; }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 3.4vh;
+}
+.card-label {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.card-tag {
+  padding: 0.7vh 1.4vh;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 1.9vh;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  scale: 0.8;
+  transition: opacity var(--t-fast) var(--ease), scale var(--t-mid) var(--ease);
+}
+.card.win .card-tag { opacity: 1; scale: 1; }
+
+.card-score {
+  display: flex;
+  align-items: baseline;
+  gap: 1.2vh;
+  margin-top: 1.4vh;
+  font-variant-numeric: tabular-nums;
+}
+.card-score b {
+  display: inline-block;
+  font-size: var(--fs-score);
+  font-weight: 800;
+  line-height: 0.86;
+  letter-spacing: -0.045em;
+  opacity: 0.62;
+  transform-origin: 0 100%;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.card.locked .card-score b { opacity: 1; }
+.card.win .card-score b { color: var(--accent); }
+.card-score small {
+  font-size: 3.2vh;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.card-bar {
+  height: 0.7vh;
+  margin-top: 2.2vh;
+  border-radius: 999px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+.card-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  transition: transform 160ms linear;
+}
+.card.locked .card-bar i { transition-duration: var(--t-slow); transition-timing-function: var(--ease); }
+.card.win .card-bar i { background: var(--accent); }
+
+/* ───────────── Result: loser half ───────────── */
+.half-dim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  background: var(--dim);
+}
+.half-dim[data-side='L'] { left: 0; }
+.half-dim[data-side='R'] { right: 0; }
+
+/* ───────────── Center: meta chip, countdown ───────────── */
+.chip {
+  position: absolute;
+  left: 50%;
+  top: 64vh; /* below the faces, above the control strip */
+  translate: -50% -50%;
+  scale: 0.94;
+  display: flex;
+  align-items: center;
+  gap: 2vh;
+  height: 9vh;
+  padding: 0 4vh;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--panel);
+  white-space: nowrap;
+}
+.chip.on { scale: 1; }
+.chip-label {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.chip-hint { font-size: var(--fs-chip); font-weight: 800; letter-spacing: -0.02em; }
+.chip-mult {
+  font-size: var(--fs-chip);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.countdown span {
+  font-size: var(--fs-count);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+}
+
+/* ───────────── Bottom strip ───────────── */
+.bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--edge);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2vh;
+  pointer-events: none;
+}
+.notice {
+  height: 3.6vh;
+  font-size: 3vh;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.slot {
+  position: relative;
+  width: 40vw;
+  height: var(--btn-h);
+}
+.slot > * {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+}
+.slot > .rise { translate: -50% -30%; }
+.slot > .rise.on { translate: -50% -50%; }
+
+.hint {
+  font-size: var(--fs-hint);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.progress {
+  width: 30vw;
+  height: 0.45vh;
+  border-radius: 999px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  background: var(--text);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+}
+.pair { display: flex; gap: 2vh; }
+
+/* ───────────── Buttons ───────────── */
+.btn {
+  height: var(--btn-h);
+  min-width: 28vh;
+  padding: 0 6vh;
+  border-radius: 999px;
+  font-size: var(--fs-button);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: scale var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
+}
+.btn.primary { background: var(--text); color: var(--bg); }
+.btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--hairline); }
+.btn.pressed { scale: 0.96; opacity: 0.86; }
+.btn.small { height: 7vh; min-width: 0; padding: 0 4vh; font-size: 2.6vh; }
+
+/* ───────────── Full screens: loading, camera errors ───────────── */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3vh;
+  padding: 12vh;
+  text-align: center;
+  background: var(--bg);
+}
+.screen-title { font-size: 5.4vh; font-weight: 800; letter-spacing: -0.03em; }
+.screen-body {
+  max-width: 110vh;
+  font-size: 2.6vh;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--text-2);
+  white-space: pre-line;
+}
+.screen-actions { display: flex; gap: 2vh; margin-top: 3vh; }
+.screen[data-kind='loading'] .screen-actions { display: none; }
+.screen[data-kind='loading'] .screen-title { animation: breathe 1.6s var(--ease) infinite alternate; }
+@keyframes breathe { from { opacity: 0.35; } to { opacity: 1; } }
+
+/* ───────────── Settings sheet ───────────── */
+.sheet {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 11, 0.94);
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+.sheet-inner {
+  width: min(124vh, 92vw);
+  margin: 0 auto;
+  padding: 6vh 0 6vh;
+  translate: 0 1.2vh;
+  transition: translate var(--t-mid) var(--ease);
+}
+.sheet.on .sheet-inner { translate: 0 0; }
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4vh;
+}
+.sheet-head h2 { font-size: 4.4vh; font-weight: 800; letter-spacing: -0.03em; }
+.setting {
+  display: grid;
+  grid-template-columns: 30vh 1fr;
+  align-items: center;
+  gap: 3vh;
+  padding: 1.8vh 0;
+  border-top: 1px solid var(--hairline);
+}
+.setting > span {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.seg { display: flex; flex-wrap: wrap; gap: 1.2vh; }
+.seg button {
+  height: 6.4vh;
+  padding: 0 2.8vh;
+  max-width: 60vh;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  font-size: 2.4vh;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition: scale var(--t-fast) var(--ease);
+}
+.seg button.pressed { scale: 0.97; }
+.seg button[aria-pressed='true'] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.sheet-status {
+  margin-top: 3vh;
+  padding-top: 2.4vh;
+  border-top: 1px solid var(--hairline);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────────── FPS overlay ───────────── */
+.fps {
+  position: absolute;
+  top: var(--edge);
+  left: 50%;
+  translate: -50% 0;
+  font-family: var(--mono);
+  font-size: var(--fs-line);
+  color: var(--text-2);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --t-fast: 1ms; --t-mid: 1ms; --t-slow: 1ms; }
+}
