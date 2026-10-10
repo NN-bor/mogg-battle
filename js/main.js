@@ -13,7 +13,7 @@ import { createRecord } from './record.js';
 import { createStabilizer } from './stabilize.js';
 import { createStill } from './still.js';
 
-export const VERSION = '1.5.0';
+export const VERSION = '1.6.0';
 
 const MESSAGES = {
   insecure: [
@@ -44,11 +44,12 @@ const MESSAGES = {
 const root = document.getElementById('app');
 const video = document.getElementById('video');
 const canvas = document.getElementById('overlay');
+const screenCanvas = document.getElementById('screen');
 
 const bus = createBus();
 const settings = createSettings(bus);
 const ui = createUI({ root, bus });
-const view = createView({ video, canvas, settings });
+const view = createView({ video, canvas, screen: screenCanvas, settings });
 const camera = createCamera({ video, bus });
 const audio = createAudio({ bus, settings });
 const assigner = createAssigner();
@@ -57,7 +58,7 @@ const players = { L: createPlayerMetrics(), R: createPlayerMetrics() };
 const stab = { L: createStabilizer(), R: createStabilizer() };
 const stabOwner = { L: { epoch: -1, seen: -1e9 }, R: { epoch: -1, seen: -1e9 } };
 const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, stab, getTracker: () => tracker });
-const still = createStill({ canvas: document.getElementById('still'), video, view, lines, bus });
+const still = createStill({ canvas: document.getElementById('still'), source: screenCanvas, view, lines, bus });
 const record = createRecord();
 const mode = createDuelMode({ bus, settings, slots: assigner.slots, players, record });
 
@@ -106,8 +107,7 @@ function ensureTracker() {
 
 async function startCamera() {
   const info = await camera.start(settings.get('cameraId'));
-  video.classList.add('live');
-  view.update(performance.now());
+  screenCanvas.classList.add('live');
   armVideoFrames();
   return info;
 }
@@ -152,11 +152,19 @@ const hasVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
 
 const ROUND_STATES = new Set(['meta', 'countdown', 'scan', 'reveal', 'result']);
 
+// Once per camera frame: framing, the picture, the detector and the mask all advance
+// together, so the mask always sits on the frame that is on screen.
 function detectFrame(now) {
-  if (!tracker || video.readyState < 2) return;
-  view.resize();
+  if (video.readyState < 2) return;
+  view.update(now);
+  view.paint();
+  if (!tracker) return;
   const faces = tracker.detect(video, now);
-  if (!faces) return; // skipped frame: lines interpolate on their own
+  if (!faces) {
+    // Skipped by the detector (slow panel): carry each mask forward to this frame.
+    for (const side of SIDES) if (assigner.slots[side].present && stab[side].ready) stab[side].hold(now);
+    return;
+  }
   const slots = assigner.update(faces, now, view.vaspect, view.mirror, tracker.swap);
   for (const side of SIDES) {
     const face = slots[side].face;
@@ -190,7 +198,6 @@ function armVideoFrames() {
 
 function frame(now) {
   requestAnimationFrame(frame);
-  view.update(now);
   if (!hasVFC && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
     detectFrame(now);
@@ -320,7 +327,10 @@ function registerServiceWorker() {
   navigator.serviceWorker.register('sw.js').catch((err) => console.warn('[sw]', err));
 }
 
-window.addEventListener('resize', () => view.resize());
+window.addEventListener('resize', () => {
+  view.resize(); // resizing clears the canvases: repaint the current frame at once
+  if (video.readyState >= 2) view.paint();
+});
 // ?debug exposes internals in the console (window.mog) for tuning CAL in metrics.js.
 if (new URLSearchParams(location.search).has('debug')) {
   window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, get tracker() { return tracker; } };

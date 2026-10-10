@@ -16,7 +16,9 @@
 </head>
 <body>
   <div id="app" data-state="boot">
+    <!-- The camera stream plays here; it is shown through #screen (js/view.js) -->
     <video id="video" muted playsinline autoplay disablepictureinpicture></video>
+    <canvas id="screen" class="layer"></canvas>
     <!-- Result freeze-frame (js/still.js) -->
     <canvas id="still" class="layer"></canvas>
     <div class="layer scrim"></div>

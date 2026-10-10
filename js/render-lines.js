@@ -52,7 +52,8 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
 
   // ───── stabilized landmarks (see stabilize.js) ─────
   // Points live in camera-frame coordinates and are mapped to the screen on use,
-  // so lines stay glued to faces while the auto-framing zooms.
+  // so lines stay glued to faces while the auto-framing zooms. They change once per
+  // camera frame, together with the picture (see view.paint).
   const smooth = Object.fromEntries(SIDES.map((s) => [s, { st: stab[s], has: false, vis: 0, n: 0 }]));
 
   function updateSmooth(sm, slot, dt, now) {
@@ -62,7 +63,6 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
       if (sm.vis === 0) sm.has = false;
       return; // fading out: keep the last pose
     }
-    sm.st.advance(now);
     sm.n = sm.st.n;
     sm.has = true;
   }
@@ -116,7 +116,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
   };
   function drawGuides(dt, fade, now) {
     const vh = view.vh;
-    const k = expAlpha(dt, 140);
+    const morph = expAlpha(dt, 140);
     const t = now - stateAt;
     const n = Math.floor(t / GHOST.cycle);
     const gt = (t % GHOST.cycle) - GHOST.at;
@@ -133,6 +133,8 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
         to = { cx: view.cw * (side === 'L' ? 0.36 : 0.64), cy: view.ch * 0.42, rx: 10.5 * vh, ry: 14.5 * vh, a: 0.55, e: 1 };
       }
       if (!g.init) Object.assign(g, to, { init: true });
+      // The oval glides onto a face that steps in, then sticks to it frame by frame.
+      const k = taken && g.e < 0.05 ? 1 : morph;
       for (const key of ['cx', 'cy', 'rx', 'ry', 'a', 'e']) g[key] += (to[key] - g[key]) * k;
       ctx.globalAlpha = g.a * fade;
       ctx.strokeStyle = WHITE;
