@@ -7,12 +7,19 @@ import { clamp, lerp, expAlpha, progress } from './util.js';
 
 const WORD = 'MOGGED';
 
+// Face contour from the ear-level points over the forehead, and the two jaw halves to the chin.
+const CONTOUR_UPPER = [234, 127, 162, 21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389, 356, 454];
+const JAW_R = [234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152];
+const JAW_L = [454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152];
+// Thirds: contour points level with the forehead top, the glabella, the nose base and the chin.
+const THIRDS = [[109, 338], [21, 251], [132, 361], [148, 377]];
+
 const EYES = [
   { outer: IDX.rOuter, inner: IDX.rInner },
   { outer: IDX.lOuter, inner: IDX.lInner },
 ];
 
-export function createLineRenderer({ canvas, view, bus, settings, slots, getTracker }) {
+export function createLineRenderer({ canvas, view, bus, settings, slots, stab, getTracker }) {
   const ctx = canvas.getContext('2d');
   const css = getComputedStyle(document.documentElement);
   const token = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
@@ -41,44 +48,27 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, getTrac
     resultAt = performance.now();
   });
 
-  // ───── landmark smoothing (render-time, every animation frame) ─────
-  // Points are smoothed in camera-frame coordinates and mapped to the screen on use,
+  // ───── stabilized landmarks (see stabilize.js) ─────
+  // Points live in camera-frame coordinates and are mapped to the screen on use,
   // so lines stay glued to faces while the auto-framing zooms.
-  const makeSmooth = () => ({ pts: new Float32Array(478 * 2), n: 0, has: false, vis: 0, lastFace: null });
-  const smooth = { L: makeSmooth(), R: makeSmooth() };
+  const smooth = Object.fromEntries(SIDES.map((s) => [s, { st: stab[s], has: false, vis: 0, n: 0 }]));
 
-  function updateSmooth(sm, slot, dt) {
-    if (slot.face) sm.lastFace = slot.face;
-    const present = slot.present && sm.lastFace;
+  function updateSmooth(sm, slot, dt, now) {
+    const present = slot.present && sm.st.ready;
     sm.vis = clamp(sm.vis + (present ? dt : -dt) / 180);
     if (!present) {
       if (sm.vis === 0) sm.has = false;
-      return;
+      return; // fading out: keep the last pose
     }
-    const lm = sm.lastFace.lm;
-    const pts = sm.pts;
-    sm.n = lm.length;
-    if (!sm.has) {
-      for (let i = 0; i < sm.n; i++) {
-        pts[2 * i] = lm[i].x;
-        pts[2 * i + 1] = lm[i].y;
-      }
-      sm.has = true;
-      return;
-    }
-    // Adaptive smoothing: heavy when still (kills jitter), light when moving (no lag).
-    const k = view.vaspect;
-    const nose = IDX.noseTip;
-    const err = Math.hypot((lm[nose].x - pts[2 * nose]) * k, lm[nose].y - pts[2 * nose + 1]);
-    const size = Math.abs(lm[IDX.lEar].x - lm[IDX.rEar].x) * k || 1e-3;
-    const a = expAlpha(dt, lerp(85, 22, clamp(err / (0.06 * size))));
-    for (let i = 0; i < sm.n; i++) {
-      pts[2 * i] += (lm[i].x - pts[2 * i]) * a;
-      pts[2 * i + 1] += (lm[i].y - pts[2 * i + 1]) * a;
-    }
+    sm.st.advance(now);
+    sm.n = sm.st.n;
+    sm.has = true;
   }
 
-  const P = (sm, i) => [view.x(sm.pts[2 * i]), view.y(sm.pts[2 * i + 1])];
+  const P = (sm, i) => {
+    const [x, y] = sm.st.point(i);
+    return [view.x(x), view.y(y)];
+  };
 
   function boxOf(sm) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -158,32 +148,56 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, getTrac
     }
   }
 
+  // Smooth curve through points (Catmull-Rom as cubic Béziers): contours follow the face
+  // instead of cutting corners between a few landmarks.
+  function curve(points, color, alpha, width = LW) {
+    if (points.length < 2 || alpha <= 0.001) return;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(points[0][0], points[0][1]);
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[Math.max(0, i - 1)], p1 = points[i], p2 = points[i + 1], p3 = points[Math.min(points.length - 1, i + 2)];
+      ctx.bezierCurveTo(
+        p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6,
+        p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6,
+        p2[0], p2[1]
+      );
+    }
+    ctx.stroke();
+  }
+
   // ───── measurement lines ─────
   function drawFaceLines(sm, alpha) {
     const key = meta?.key;
     const col = (k) => (key === k ? ACCENT : WHITE);
     const strong = (k) => (key === k ? 1 : 0.85);
     const p = (i) => P(sm, i);
+    const ps = (list) => list.map(p);
+
+    // Face contour: forehead and temples faint, the jaw strong (it is a metric).
+    curve(ps(CONTOUR_UPPER), WHITE, alpha * 0.3);
+    curve(ps(JAW_R), col('JAWLINE'), alpha * strong('JAWLINE'));
+    curve(ps(JAW_L), col('JAWLINE'), alpha * strong('JAWLINE'));
+    dot(p(IDX.rGonion), WHITE, alpha);
+    dot(p(IDX.lGonion), WHITE, alpha);
 
     // Symmetry axis, forehead → chin.
     const top = p(IDX.top), chin = p(IDX.chin);
     const axis = unit(sub(chin, top));
     const axisLen = len(sub(chin, top));
-    stroke([along(top, axis, -axisLen * 0.14), along(chin, axis, axisLen * 0.08)], col('SYMMETRY'), alpha * strong('SYMMETRY'));
+    stroke([along(top, axis, -axisLen * 0.12), along(chin, axis, axisLen * 0.08)], col('SYMMETRY'), alpha * strong('SYMMETRY'));
+    dot(chin, WHITE, alpha);
 
-    // Facial thirds, perpendicular to the axis.
-    const perp = [-axis[1], axis[0]];
-    const half = len(sub(p(IDX.lEar), p(IDX.rEar))) * 0.3;
-    for (const i of [IDX.top, IDX.glabella, IDX.subnasale, IDX.chin]) {
-      const c = p(i);
-      stroke([along(c, perp, -half), along(c, perp, half)], WHITE, alpha * 0.32);
-    }
+    // Facial thirds, edge to edge of the face at each level (contour landmarks at that height).
+    for (const [r, l] of THIRDS) stroke([p(r), p(l)], WHITE, alpha * 0.28);
 
     // Eye line through the outer corners.
     const ro = p(IDX.rOuter), lo = p(IDX.lOuter);
     const ed = unit(sub(lo, ro));
     const span = len(sub(lo, ro));
-    stroke([along(ro, ed, -span * 0.24), along(lo, ed, span * 0.24)], col('STARE'), alpha * strong('STARE') * 0.9);
+    stroke([along(ro, ed, -span * 0.2), along(lo, ed, span * 0.2)], col('STARE'), alpha * strong('STARE') * 0.85);
 
     // Canthal tilt, inner → outer corner of each eye.
     for (const e of EYES) {
@@ -191,13 +205,6 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, getTrac
       dot(p(e.inner), WHITE, alpha);
       dot(p(e.outer), WHITE, alpha);
     }
-
-    // Jaw: ear level → jaw corner → chin, both sides.
-    stroke([p(IDX.rEar), p(IDX.rGonion), chin], col('JAWLINE'), alpha * strong('JAWLINE'));
-    stroke([p(IDX.lEar), p(IDX.lGonion), chin], col('JAWLINE'), alpha * strong('JAWLINE'));
-    dot(p(IDX.rGonion), WHITE, alpha);
-    dot(p(IDX.lGonion), WHITE, alpha);
-    dot(chin, WHITE, alpha);
 
     // Meta-only extras: what is being measured right now gets the accent.
     if (key === 'BROW') {
@@ -282,7 +289,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, getTrac
   function draw(now) {
     const dt = clamp(now - last, 0, 100);
     last = now;
-    for (const side of SIDES) updateSmooth(smooth[side], slots[side], dt);
+    for (const side of SIDES) updateSmooth(smooth[side], slots[side], dt, now);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, view.cw, view.ch);
     LW = Math.max(1, view.vh * 0.139); // 1.5 px at 1080p
@@ -328,5 +335,6 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, getTrac
     ctx.globalAlpha = 1;
   }
 
-  return { draw, smooth };
+  // pointCam: stabilized landmark in camera coordinates (diagnostics, jitter tests).
+  return { draw, smooth, pointCam: (side, i) => stab[side].point(i) };
 }

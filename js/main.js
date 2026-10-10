@@ -10,8 +10,9 @@ import { createLineRenderer } from './render-lines.js';
 import { createAudio } from './audio.js';
 import { createDuelMode } from './modes/duel.js';
 import { createRecord } from './record.js';
+import { createStabilizer } from './stabilize.js';
 
-export const VERSION = '1.2.0';
+export const VERSION = '1.3.0';
 
 const MESSAGES = {
   insecure: [
@@ -51,7 +52,10 @@ const camera = createCamera({ video, bus });
 const audio = createAudio({ bus, settings });
 const assigner = createAssigner();
 const players = { L: createPlayerMetrics(), R: createPlayerMetrics() };
-const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, getTracker: () => tracker });
+// One mask stabilizer per player: filtered head pose + slowly averaged face shape.
+const stab = { L: createStabilizer(), R: createStabilizer() };
+const stabOwner = { L: { epoch: -1, seen: -1e9 }, R: { epoch: -1, seen: -1e9 } };
+const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, stab, getTracker: () => tracker });
 const record = createRecord();
 const mode = createDuelMode({ bus, settings, slots: assigner.slots, players, record });
 
@@ -150,6 +154,16 @@ function detectFrame(now) {
   if (!faces) return; // skipped frame: lines interpolate on their own
   const slots = assigner.update(faces, now, view.vaspect, view.mirror, tracker.swap);
   for (const side of SIDES) {
+    const face = slots[side].face;
+    if (face) {
+      const own = stabOwner[side];
+      // A new person, or the face was gone for a moment: start the mask fresh instead of gliding.
+      if (own.epoch !== slots[side].epoch || now - own.seen > 400) stab[side].reset();
+      own.epoch = slots[side].epoch;
+      own.seen = now;
+      stab[side].update(face.lm, now, view.vaspect);
+      face.rigid = { ...stab[side].raw };
+    }
     players[side].sync(slots[side].epoch);
     players[side].update(slots[side].face, now, view.vaspect);
   }
@@ -304,6 +318,6 @@ function registerServiceWorker() {
 window.addEventListener('resize', () => view.resize());
 // ?debug exposes internals in the console (window.mog) for tuning CAL in metrics.js.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.mog = { bus, settings, players, slots: assigner.slots, mode, get tracker() { return tracker; } };
+  window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, get tracker() { return tracker; } };
 }
 boot();

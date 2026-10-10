@@ -15,6 +15,10 @@ const GUIDE_X = { L: 0.36, R: 0.64 };
 const EMPTY_MS = 1500;   // nobody in frame this long → zoom back out
 const TAU = 650;         // framing motion, ms
 const TAU_ROUND = 2600;  // during a round: drift slowly instead of reframing
+// Dead zone: small changes of the ideal framing are ignored, so the picture does not
+// "breathe" with every twitch of the face boxes.
+const DEAD_MOVE = 0.05;  // share of the view width
+const DEAD_ZOOM = 0.08;
 
 export function createView({ video, canvas, settings }) {
   const v = {
@@ -106,7 +110,12 @@ export function createView({ video, canvas, settings }) {
       cx = cx - (v.mirror ? 1 - g : g) * w + w / 2;
     }
     const cy = (y0 + y1) / 2 + (0.5 - FACE_Y) * h;
-    target = rectFor(z, cx, cy);
+    const want = rectFor(z, cx, cy);
+    const near =
+      target &&
+      Math.hypot(want.x + want.w / 2 - (target.x + target.w / 2), want.y + want.h / 2 - (target.y + target.h / 2)) < DEAD_MOVE * target.w &&
+      Math.abs(want.w / target.w - 1) < DEAD_ZOOM;
+    if (!near) target = want;
   }
 
   function update(now) {

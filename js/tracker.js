@@ -32,6 +32,11 @@ const ROI_PER_FACE = 2.4;  // tile side / face size while tracking
 const LOST_MS = 400;       // no face in a tile this long → search again (min; scales with detector rate)
 const SEARCH_HOLD = 1;     // detector runs per search crop before moving on (BlazeFace hits on the first frame)
 const ROI_TAU = 90;        // ms, how fast a tile follows its face
+// Dead zone: a tile only moves when its face drifts this far (share of the tile) or
+// changes size this much. A still face then gets pixel-identical crops, which is what keeps
+// landmarks from shimmering; a constantly sliding crop re-samples the face every frame.
+const ROI_DEAD_MOVE = 0.07;
+const ROI_DEAD_SIZE = 0.12;
 
 export async function createTracker({ bus, settings }) {
   const vision = await import(BUNDLE_URL);
@@ -298,7 +303,22 @@ export async function createTracker({ bus, settings }) {
       const wasSearching = r.mode === 'search';
       r.mode = 'track';
       r.seenAt = now;
-      r.target = { cx: box.cx, cy: box.cy, s: Math.min(Math.max(box.size * ROI_PER_FACE, vh * 0.16), Math.max(vw / 2, vh)) };
+      const want = { cx: box.cx, cy: box.cy, s: Math.min(Math.max(box.size * ROI_PER_FACE, vh * 0.16), Math.max(vw / 2, vh)) };
+      const t0 = r.target;
+      if (wasSearching || !t0) {
+        r.target = want;
+      } else {
+        // Leash: inside the dead radius the tile stays put; beyond it, it is pulled along
+        // smoothly by the excess only (no jump when the face finally crosses the edge).
+        const d = Math.hypot(want.cx - t0.cx, want.cy - t0.cy);
+        const dead = ROI_DEAD_MOVE * t0.s;
+        const k = d > dead ? 1 - dead / d : 0;
+        r.target = {
+          cx: t0.cx + (want.cx - t0.cx) * k,
+          cy: t0.cy + (want.cy - t0.cy) * k,
+          s: Math.abs(want.s / t0.s - 1) > ROI_DEAD_SIZE ? want.s : t0.s,
+        };
+      }
       // Just acquired: jump the tile onto the face instead of easing from the search crop.
       if (wasSearching) Object.assign(r, r.target);
       if (b.partial) continue;
