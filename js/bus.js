@@ -4,7 +4,7 @@
 // Events used in v1:
 //   state            {from, to, data}            fsm transitions of the active mode
 //   frame            {now, slots, players}       every detector result after assignment
-//   hint             {text}                      idle helper text
+//   attract          {title, sub}                idle headline: who is missing
 //   notice           {text}                      one-line message above the action slot
 //   round:meta       {key, label, mult, hint}   round bonus; the UI shows only the hint
 //   round:countdown  {n}

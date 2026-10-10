@@ -11,8 +11,9 @@ import { createAudio } from './audio.js';
 import { createDuelMode } from './modes/duel.js';
 import { createRecord } from './record.js';
 import { createStabilizer } from './stabilize.js';
+import { createStill } from './still.js';
 
-export const VERSION = '1.4.0';
+export const VERSION = '1.5.0';
 
 const MESSAGES = {
   insecure: [
@@ -56,6 +57,7 @@ const players = { L: createPlayerMetrics(), R: createPlayerMetrics() };
 const stab = { L: createStabilizer(), R: createStabilizer() };
 const stabOwner = { L: { epoch: -1, seen: -1e9 }, R: { epoch: -1, seen: -1e9 } };
 const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, stab, getTracker: () => tracker });
+const still = createStill({ canvas: document.getElementById('still'), video, view, lines, bus });
 const record = createRecord();
 const mode = createDuelMode({ bus, settings, slots: assigner.slots, players, record });
 
@@ -195,7 +197,7 @@ function frame(now) {
   }
   tracker?.tick(now);
   bus.emit('tick', { now });
-  lines.draw(now);
+  lines.draw(now, still.draw(now));
   if (now - fpsShownAt > 500) {
     fpsShownAt = now;
     const s = tracker?.stats;

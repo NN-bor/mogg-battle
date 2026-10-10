@@ -44,7 +44,6 @@
   --mog: #ff3b30;      /* the loser: the strike through the eyes, nothing else */
 
   --scrim: rgba(10, 10, 11, 0.32);   /* flat darkening of the video */
-  --dim: rgba(0, 0, 0, 0.4);         /* loser half */
 
   --font: 'Inter', system-ui, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -53,7 +52,7 @@
   --fs-label: 2vh;     /* 700, uppercase, .1em */
   --fs-score: 13vh;    /* 800, the one number a player sees */
   --fs-count: 40vh;    /* 800 */
-  --fs-hint: 5vh;      /* 700 */
+  --fs-attract: 12vh;  /* 900, uppercase: the idle headline */
   --fs-button: 3.4vh;  /* 700 */
   --fs-chip: 4vh;      /* 800 */
   --fs-small: 1.8vh;
@@ -117,6 +116,14 @@ button:focus { outline: none; }
   transition: opacity var(--t-slow) var(--ease);
 }
 #video.live { opacity: 1; }
+
+/* Result freeze-frame: appears at once on the hit, fades back to live video */
+#still {
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-slow) var(--ease);
+}
+#still.on { opacity: 1; transition: none; }
 
 .scrim { background: var(--scrim); }
 #overlay { pointer-events: none; }
@@ -292,17 +299,6 @@ button:focus { outline: none; }
 .card.locked .card-bar i { transition-duration: var(--t-slow); transition-timing-function: var(--ease); }
 .card.win .card-bar i { background: var(--accent); }
 
-/* ───────────── Result: loser half ───────────── */
-.half-dim {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 50%;
-  background: var(--dim);
-}
-.half-dim[data-side='L'] { left: 0; }
-.half-dim[data-side='R'] { right: 0; }
-
 /* ───────────── Center: meta chip, countdown ───────────── */
 .chip {
   position: absolute;
@@ -353,6 +349,30 @@ button:focus { outline: none; }
   opacity: 0;
 }
 
+/* ───────────── Idle: the attract headline under the ovals ───────────── */
+.attract {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--edge) + 2vh);
+  text-align: center;
+  pointer-events: none;
+}
+.attract-title {
+  font-size: var(--fs-attract);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+}
+.attract-sub {
+  margin-top: 2.2vh;
+  font-size: 3.2vh;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-2);
+}
+
 /* ───────────── Bottom strip ───────────── */
 .bottom {
   position: absolute;
@@ -387,12 +407,6 @@ button:focus { outline: none; }
 .slot > .rise { translate: -50% -30%; }
 .slot > .rise.on { translate: -50% -50%; }
 
-.hint {
-  font-size: var(--fs-hint);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-}
 /* Scan: tug of war (who leads right now) + elapsed time */
 .scanbar {
   display: flex;
