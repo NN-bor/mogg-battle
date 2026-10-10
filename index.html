@@ -25,14 +25,15 @@
     <!-- Invisible: hold 1.5 s to open settings -->
     <div class="hotspot" id="hotspot" aria-hidden="true"></div>
     <div class="series v" id="series"><span data-side="L">0</span><i>:</i><span data-side="R">0</span></div>
+    <div class="record v rise" id="record"><span class="record-label">Рекорд дня</span><b>—</b></div>
 
     <section class="card v rise" data-side="L">
-      <div class="card-head"><span class="card-label">Слева</span><span class="card-tag">Победа</span></div>
+      <div class="card-head"><span class="card-label">Слева<em class="card-streak"></em></span><span class="card-tag">Победа</span></div>
       <div class="card-score"><b>—</b><small>/10</small></div>
       <div class="card-bar"><i></i></div>
     </section>
     <section class="card v rise" data-side="R">
-      <div class="card-head"><span class="card-label">Справа</span><span class="card-tag">Победа</span></div>
+      <div class="card-head"><span class="card-label">Справа<em class="card-streak"></em></span><span class="card-tag">Победа</span></div>
       <div class="card-score"><b>—</b><small>/10</small></div>
       <div class="card-bar"><i></i></div>
     </section>
@@ -47,7 +48,10 @@
       <div class="slot">
         <p class="hint v rise" id="hint">Встаньте рядом</p>
         <button class="btn primary v rise" id="btn-start" type="button">Старт</button>
-        <div class="progress v" id="progress"><i></i></div>
+        <div class="scanbar v" id="scanbar">
+          <div class="tug" id="tug"><div class="tug-track"><i class="tug-l"></i><i class="tug-r"></i></div><div class="tug-knob"></div></div>
+          <div class="progress" id="progress"><i></i></div>
+        </div>
         <div class="pair v rise" id="result-actions">
           <button class="btn primary" id="btn-rematch" type="button">Реванш</button>
           <button class="btn secondary" id="btn-new" type="button">Новые игроки</button>
