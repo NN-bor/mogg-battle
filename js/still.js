@@ -15,7 +15,8 @@ const ZOOM = { win: 1.2, draw: 1.06 };
 const SHAKE = { ms: 380, amp: 1.2, hz: 13, tau: 110 }; // amp in vh
 const WIPE_AFTER = 600;                   // release: clear the frame once the fade is over
 
-export function createStill({ canvas, video, view, lines, bus }) {
+// source: the screen canvas (view.js), i.e. exactly the picture that is on screen.
+export function createStill({ canvas, source, view, lines, bus }) {
   const ctx = canvas.getContext('2d');
   const color = document.createElement('canvas');
   const gray = document.createElement('canvas');
@@ -32,15 +33,11 @@ export function createStill({ canvas, video, view, lines, bus }) {
   }
 
   function capture(res) {
-    if (video.readyState < 2 || !view.vw) return;
+    if (!view.vw) return;
     clearTimeout(wipeTimer);
-    view.resize();
-    const { cw, ch, rect } = view;
+    const { width: cw, height: ch } = source;
     for (const c of [canvas, color, gray]) fit(c, cw, ch);
-    // Exactly what is on screen: the auto-framed crop, mirrored like the video.
-    const c1 = color.getContext('2d');
-    c1.setTransform(view.mirror ? -1 : 1, 0, 0, 1, view.mirror ? cw : 0, 0);
-    c1.drawImage(video, rect.x, rect.y, rect.w, rect.h, 0, 0, cw, ch);
+    color.getContext('2d').drawImage(source, 0, 0);
     const g = gray.getContext('2d');
     g.filter = GRAY;
     g.drawImage(color, 0, 0);

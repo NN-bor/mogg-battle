@@ -5,6 +5,11 @@ import { SIDES } from './assign.js';
 // display is free to crop: in "auto" it frames both players like a camera operator would
 // (faces large, room for the panels at the edges), and holds still during a round.
 // Landmarks are kept in camera-frame coordinates; x()/y() map them to canvas pixels.
+//
+// The camera picture is painted into the `screen` canvas once per camera frame, in the same
+// step as the mask is computed for that frame. A <video> on screen is shown by the
+// compositor as soon as a frame arrives, while the mask lands a detection later, so the
+// two would drift apart by a frame whenever the head moves.
 
 const MAX_CANVAS_W = 1920;
 const AUTO_MAX_ZOOM = 2.2;
@@ -20,7 +25,8 @@ const TAU_ROUND = 2600;  // during a round: drift slowly instead of reframing
 const DEAD_MOVE = 0.05;  // share of the view width
 const DEAD_ZOOM = 0.08;
 
-export function createView({ video, canvas, settings }) {
+export function createView({ video, canvas, screen, settings }) {
+  const sctx = screen.getContext('2d', { alpha: false });
   const v = {
     cw: 1, ch: 1,       // overlay canvas, ≤ 1920 wide
     sw: 1, sh: 1,       // viewport, CSS px
@@ -37,7 +43,6 @@ export function createView({ video, canvas, settings }) {
   let target = null;
   let lastT = 0;
   let emptySince = 0;
-  let applied = '';
   let slow = false;
 
   function rectFor(zoom, cx, cy) {
@@ -56,8 +61,8 @@ export function createView({ video, canvas, settings }) {
     Object.assign(v, { sw, sh, vw, vhgt, aspect: sw / sh, vaspect: vw && vhgt ? vw / vhgt : 16 / 9 });
     v.cw = Math.min(MAX_CANVAS_W, Math.round(sw * dpr));
     v.ch = Math.round((v.cw * sh) / sw);
-    canvas.width = v.cw;
-    canvas.height = v.ch;
+    canvas.width = screen.width = v.cw;
+    canvas.height = screen.height = v.ch;
     v.vh = v.ch / 100;
     v.sizeVersion++;
     if (vw && vhgt) {
@@ -132,16 +137,14 @@ export function createView({ video, canvas, settings }) {
     const cx = r.x + r.w / 2 + (target.x + target.w / 2 - (r.x + r.w / 2)) * a;
     const cy = r.y + r.h / 2 + (target.y + target.h / 2 - (r.y + r.h / 2)) * a;
     v.rect = rectFor(full.w / w, cx, cy);
+  }
 
-    const s = v.sw / v.rect.w; // CSS px per camera px
-    const tx = v.mirror ? v.sw + v.rect.x * s : -v.rect.x * s;
-    const css = `${(v.vw * s).toFixed(2)}|${(v.vhgt * s).toFixed(2)}|${v.mirror}|${tx.toFixed(2)}|${(-v.rect.y * s).toFixed(2)}`;
-    if (css !== applied) {
-      applied = css;
-      video.style.width = `${v.vw * s}px`;
-      video.style.height = `${v.vhgt * s}px`;
-      video.style.transform = `matrix(${v.mirror ? -1 : 1}, 0, 0, 1, ${tx}, ${-v.rect.y * s})`;
-    }
+  // The current camera frame, cropped to the framing and mirrored, onto the screen canvas.
+  function paint() {
+    if (!full) return;
+    const r = v.rect;
+    sctx.setTransform(v.mirror ? -1 : 1, 0, 0, 1, v.mirror ? v.cw : 0, 0);
+    sctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, v.cw, v.ch);
   }
 
   // Camera-frame normalized coordinates → canvas px.
@@ -153,6 +156,7 @@ export function createView({ video, canvas, settings }) {
   // Camera px → canvas px (for debug drawing of detector tiles).
   v.px = (x, y) => [v.x(x / v.vw), v.y(y / v.vhgt)];
   v.update = update;
+  v.paint = paint;
   v.frame = frame;
   v.resize = resize;
   return v;
