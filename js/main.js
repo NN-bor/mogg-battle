@@ -12,7 +12,7 @@ import { createDuelMode } from './modes/duel.js';
 import { createRecord } from './record.js';
 import { createStabilizer } from './stabilize.js';
 
-export const VERSION = '1.3.0';
+export const VERSION = '1.4.0';
 
 const MESSAGES = {
   insecure: [
@@ -127,7 +127,10 @@ async function boot() {
   bus.emit('state', { to: 'boot' });
   try {
     await Promise.all([startCamera(), ensureTracker(), document.fonts.ready]);
-    await document.fonts.load('500 20px "JetBrains Mono"').catch(() => {});
+    await Promise.all([
+      document.fonts.load('500 20px "JetBrains Mono"'),
+      document.fonts.load('900 expanded 40px Archivo', 'MOGGED!'),
+    ]).catch(() => {});
     mode.start();
     startLoop();
   } catch (err) {

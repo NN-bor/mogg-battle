@@ -5,7 +5,8 @@ import { clamp, lerp, expAlpha, progress } from './util.js';
 // Canvas overlay: guides, brackets, measurement lines, scan line, and the MOGGED strike.
 // Lines come from real landmarks; only the score is theatre.
 
-const WORD = 'MOGGED';
+const WORD = 'MOGGED!';
+const BAND = '#000';
 
 // Face contour from the ear-level points over the forehead, and the two jaw halves to the chin.
 const CONTOUR_UPPER = [234, 127, 162, 21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389, 356, 454];
@@ -239,7 +240,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     stroke([[b.x0 - b.w * 0.18, y], [b.x1 + b.w * 0.18, y]], WHITE, alpha * 0.85 * fade, Math.max(1, view.vh * 0.093));
   }
 
-  // ───── result: the loser's eyes struck through, MOGGED on the strike ─────
+  // ───── result: a black band across the loser's eyes, MOGGED! in red wide caps ─────
   function drawStrike(side, sm, t) {
     const vh = view.vh;
     const ro = P(sm, IDX.rOuter), lo = P(sm, IDX.lOuter);
@@ -247,9 +248,14 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     if (d[0] < 0) d = [-d[0], -d[1]]; // the word always reads left to right
     const span = len(sub(lo, ro));
     const c = mid(ro, lo);
-    const thick = Math.max(span * 0.46, 5.6 * vh);
-    // Reach well past the face, but never into the other player's half.
-    const reach = Math.max(span * 1.7, 20 * vh);
+    const thick = Math.max(span * 0.52, 6 * vh);
+    const fs = Math.round(thick * 0.6);
+    ctx.font = `900 expanded ${fs}px Archivo, Inter, system-ui, sans-serif`;
+    if ('fontStretch' in ctx) ctx.fontStretch = 'expanded';
+    ctx.letterSpacing = '0px';
+    const m = ctx.measureText(WORD);
+    // Long enough for the word with margins, centered on the eyes, never into the other half.
+    const reach = Math.max(span * 1.7, m.width / 2 + thick * 0.6, 18 * vh);
     const toCenter = side === 'L' ? view.cw / 2 - c[0] : c[0] - view.cw / 2;
     const inward = clamp(toCenter / Math.max(d[0], 0.3) - 1.5 * vh, span * 0.9, reach);
     const left = side === 'L' ? reach : inward;
@@ -257,31 +263,24 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
 
     ctx.save();
     ctx.translate(c[0], c[1]);
-    ctx.rotate(Math.atan2(d[1], d[0]) - 0.09); // a slight diagonal, like a pen stroke
-    // The stroke is drawn left to right in 240 ms.
+    ctx.rotate(Math.atan2(d[1], d[0]));
+    // The band wipes in left to right (220 ms), then the word slams in.
     ctx.globalAlpha = sm.vis;
-    ctx.fillStyle = MOG;
-    ctx.beginPath();
-    ctx.roundRect(-left, -thick / 2, (left + right) * progress(t, 0, 240), thick, thick * 0.14);
-    ctx.fill();
+    ctx.fillStyle = BAND;
+    ctx.fillRect(-left, -thick / 2, (left + right) * progress(t, 0, 220), thick);
 
-    const k = clamp((t - 150) / 200);
+    const k = clamp((t - 120) / 160);
     if (k > 0) {
-      const fs = Math.round(thick * 0.62);
-      ctx.font = `900 ${fs}px Inter, system-ui, sans-serif`;
-      ctx.letterSpacing = `${Math.round(fs * 0.08)}px`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'alphabetic';
-      const w = ctx.measureText(WORD).width;
-      // Centered on the face, but kept inside the stroke.
-      const x = clamp(0, -left + w / 2 + thick * 0.4, right - w / 2 - thick * 0.4);
-      const s = lerp(1.2, 1, progress(t - 150, 0, 260));
-      ctx.translate(x + fs * 0.04, 0);
+      const x = clamp(0, -left + m.width / 2 + thick * 0.45, right - m.width / 2 - thick * 0.45);
+      ctx.translate(x, 0);
+      const s = lerp(1.25, 1, progress(t - 120, 0, 220));
       ctx.scale(s, s);
       ctx.globalAlpha = sm.vis * k;
-      ctx.fillStyle = WHITE;
-      ctx.fillText(WORD, 0, fs * 0.36); // cap height ≈ 0.73 em: baseline at +half of it
-      ctx.letterSpacing = '0px';
+      ctx.fillStyle = MOG;
+      // Optical centering on the cap height (no descenders in the word).
+      ctx.fillText(WORD, 0, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
     }
     ctx.restore();
   }
