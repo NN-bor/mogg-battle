@@ -1,11 +1,15 @@
 import { createMachine } from '../fsm.js';
-import { pickMeta, computeRound, liveScore } from '../score.js';
+import { pickMeta, computeRound, liveScore, scoreText } from '../score.js';
 import { SIDES } from '../assign.js';
 import { lerp } from '../util.js';
 
 // The duel: idle → ready → meta → countdown → scan → reveal → result.
 // Talks to everything else through bus events, so other modes can reuse the UI,
 // lines and audio by emitting the same events.
+//
+// King of the hill: the winner keeps their side and a win streak, the loser steps away,
+// the next challenger steps in and the next fight is offered automatically. Identity is
+// the slot "epoch" from assign.js; no faces or names are stored.
 
 const T = {
   stable: 1000,     // both faces present this long → ready
@@ -16,17 +20,22 @@ const T = {
   lock: 700,        // reveal: lower score locks first, the higher one 700 ms later
   settle: 650,      // pause after the second lock before the hit
   liveEvery: 83,    // ~12 Hz for running numbers
-  emptyReset: 10000,// nobody in frame this long → series resets (new pair)
+  emptyReset: 10000,// nobody in frame this long → series and streaks reset
   resultIdle: 12000,// nobody in frame this long on the result screen → idle
 };
 
-export function createDuelMode({ bus, settings, slots, players }) {
+const SIDE_NAME = { L: 'слева', R: 'справа' };
+
+export function createDuelMode({ bus, settings, slots, players, record }) {
   let series = { L: 0, R: 0 };
+  let streak = { L: 0, R: 0 };
+  const owner = { L: null, R: null }; // slot epoch each streak belongs to
   let meta = null;
   let lastMetaKey = null;
   let round = null;
   let liveAt = 0;
   let emptySince = 0;
+  let challenger = false;
   const tremor = { L: 0, R: 0 };
 
   const present = () => SIDES.filter((s) => slots[s].present).length;
@@ -37,6 +46,38 @@ export function createDuelMode({ bus, settings, slots, players }) {
   function setSeries(L, R) {
     series = { L, R };
     bus.emit('series', { ...series });
+  }
+
+  function setStreak(next) {
+    streak = next;
+    bus.emit('streak', { ...streak });
+  }
+
+  function resetPair() {
+    setSeries(0, 0);
+    setStreak({ L: 0, R: 0 });
+  }
+
+  // A different person took a slot: their streak starts from zero, and the
+  // head-to-head series belongs to the old pair, so it resets too.
+  function syncPair() {
+    let changed = false;
+    for (const side of SIDES) {
+      const e = slots[side].epoch;
+      if (owner[side] === null) owner[side] = e;
+      else if (e !== owner[side]) {
+        owner[side] = e;
+        if (streak[side]) setStreak({ ...streak, [side]: 0 });
+        changed = true;
+      }
+    }
+    if (changed && (series.L || series.R)) setSeries(0, 0);
+    return changed;
+  }
+
+  function king() {
+    const side = streak.L >= streak.R ? 'L' : 'R';
+    return streak[side] >= 2 ? `Царь горы ${SIDE_NAME[side]} ×${streak[side]}` : '';
   }
 
   function trackEmpty(now, ms, fn) {
@@ -53,7 +94,7 @@ export function createDuelMode({ bus, settings, slots, players }) {
 
   function abort() {
     bus.emit('notice', { text: 'Лицо пропало из кадра. Ещё раз?' });
-    fsm.go('ready');
+    fsm.go('ready', { reason: 'lost' });
   }
 
   // The single visible number runs while scanning, so players see their face move it.
@@ -79,13 +120,20 @@ export function createDuelMode({ bus, settings, slots, players }) {
         enter: hint,
         frame(now) {
           hint();
+          syncPair();
           if (stable()) fsm.go('ready');
-          trackEmpty(now, T.emptyReset, () => (series.L || series.R) && setSeries(0, 0));
+          trackEmpty(now, T.emptyReset, () => (series.L || series.R || streak.L || streak.R) && resetPair());
         },
       },
 
       ready: {
+        enter(data) {
+          if (data?.reason === 'lost') return; // keep the "face lost" notice
+          const text = [data?.reason === 'challenger' ? 'Новый соперник' : '', king()].filter(Boolean).join(' · ');
+          if (text) bus.emit('notice', { text, ms: 0 });
+        },
         frame() {
+          syncPair();
           if (lost()) fsm.go('idle');
         },
         start() {
@@ -95,6 +143,7 @@ export function createDuelMode({ bus, settings, slots, players }) {
 
       meta: {
         enter() {
+          challenger = false;
           meta = pickMeta(lastMetaKey);
           lastMetaKey = meta.key;
           bus.emit('round:meta', meta);
@@ -157,17 +206,30 @@ export function createDuelMode({ bus, settings, slots, players }) {
       result: {
         enter() {
           const res = round.result;
-          if (res.winner) setSeries(series.L + (res.winner === 'L'), series.R + (res.winner === 'R'));
-          bus.emit('round:result', res);
+          for (const side of SIDES) owner[side] = slots[side].epoch;
+          if (res.winner) {
+            setSeries(series.L + (res.winner === 'L'), series.R + (res.winner === 'R'));
+            setStreak({ ...streak, [res.winner]: streak[res.winner] + 1, [res.loser]: 0 });
+          }
+          const best = record.submit(Math.max(res.scores.L, res.scores.R));
+          bus.emit('round:result', { ...res, streak: { ...streak } });
+          bus.emit('record', { value: best.value });
+          const text = [res.draw ? 'Ничья' : '', best.isNew ? `Новый рекорд дня: ${scoreText(best.value)}` : '']
+            .filter(Boolean)
+            .join(' · ');
+          if (text) bus.emit('notice', { text, ms: 0 });
         },
         frame(now) {
+          // The loser stepped away and a challenger stepped in: offer the next fight.
+          if (syncPair()) challenger = true;
+          if (challenger && stable()) fsm.go('ready', { reason: 'challenger' });
           trackEmpty(now, T.resultIdle, () => fsm.go('idle'));
         },
         rematch() {
           fsm.go(present() === 2 ? 'meta' : 'idle');
         },
         newPlayers() {
-          setSeries(0, 0);
+          resetPair();
           fsm.go('idle');
         },
       },
@@ -183,6 +245,7 @@ export function createDuelMode({ bus, settings, slots, players }) {
   return {
     start() {
       emptySince = 0;
+      bus.emit('record', { value: record.value });
       fsm.go('idle');
     },
     stop() {

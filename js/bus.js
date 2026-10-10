@@ -13,7 +13,9 @@
 //   score:live       {L, R}                      running 0..10 scores while scanning
 //   round:lock       {side, score, isLast}       a final score locks (runner-up first)
 //   round:result     {winner, loser, draw, scores, margin}
-//   series           {L, R}
+//   series           {L, R}                      head-to-head score of the current pair
+//   streak           {L, R}                      wins in a row per slot (king of the hill)
+//   record           {value}                     best score of the day, or null
 //   settings         {key, value, values}
 //   camera:*, tracker:*  lifecycle and errors
 export function createBus() {

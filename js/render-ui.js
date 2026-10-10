@@ -10,12 +10,12 @@ const EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 const VISIBLE = {
   boot: ['screen'],
   nocamera: ['screen'],
-  idle: ['hint'],
-  ready: ['start'],
+  idle: ['hint', 'record'],
+  ready: ['start', 'record'],
   meta: ['chip'],
   countdown: ['cards'],
-  scan: ['cards', 'progress'],
-  reveal: ['cards'],
+  scan: ['cards', 'scanbar'],
+  reveal: ['cards', 'scanbar'],
   result: ['cards', 'actions'],
 };
 
@@ -30,8 +30,14 @@ export function createUI({ root, bus }) {
     seriesNum: { L: $('#series [data-side="L"]'), R: $('#series [data-side="R"]') },
     hint: $('#hint'),
     start: $('#btn-start'),
-    progress: $('#progress'),
+    scanbar: $('#scanbar'),
     progressBar: $('#progress i'),
+    tug: $('#tug'),
+    tugL: $('#tug .tug-l'),
+    tugR: $('#tug .tug-r'),
+    tugKnob: $('#tug .tug-knob'),
+    record: $('#record'),
+    recordValue: $('#record b'),
     actions: $('#result-actions'),
     notice: $('#notice'),
     chip: $('#chip'),
@@ -43,7 +49,18 @@ export function createUI({ root, bus }) {
     screenBody: $('#screen .screen-body'),
     fps: $('#fps'),
   };
-  const score = Object.fromEntries(SIDES.map((s) => [s, { num: r.cards[s].querySelector('.card-score b'), bar: r.cards[s].querySelector('.card-bar i'), shown: NaN, anim: 0 }]));
+  const score = Object.fromEntries(
+    SIDES.map((s) => [
+      s,
+      {
+        num: r.cards[s].querySelector('.card-score b'),
+        bar: r.cards[s].querySelector('.card-bar i'),
+        streak: r.cards[s].querySelector('.card-streak'),
+        shown: NaN,
+        anim: 0,
+      },
+    ])
+  );
 
   const groups = {
     screen: [r.screen],
@@ -51,15 +68,30 @@ export function createUI({ root, bus }) {
     start: [r.start],
     chip: [r.chip],
     cards: [r.cards.L, r.cards.R],
-    progress: [r.progress],
+    scanbar: [r.scanbar],
     actions: [r.actions],
+    record: [r.record],
   };
+  let hasRecord = false;
 
   let state = 'boot';
   let noticeTimer = 0;
   let noticeSticky = false;
 
-  const setVisible = (name, on) => groups[name].forEach((node) => node.classList.toggle('on', on));
+  const setVisible = (name, on) =>
+    groups[name].forEach((node) => node.classList.toggle('on', on && (name !== 'record' || hasRecord)));
+
+  // Tug of war: the knob leans toward whoever leads right now; 1 point ≈ a third of the bar.
+  function updateTug() {
+    const L = score.L.shown, R = score.R.shown;
+    const known = Number.isFinite(L) && Number.isFinite(R);
+    const p = known ? clamp(0.5 + (L - R) * 0.35, 0.06, 0.94) : 0.5;
+    r.tugL.style.transform = `scaleX(${p.toFixed(4)})`;
+    r.tugR.style.transform = `scaleX(${(1 - p).toFixed(4)})`;
+    r.tugKnob.style.transform = `translateX(${(p * 100).toFixed(2)}%)`;
+    r.tug.classList.toggle('lead-L', known && L - R > 0.02);
+    r.tug.classList.toggle('lead-R', known && R - L > 0.02);
+  }
 
   function show(side, value) {
     const s = score[side];
@@ -67,6 +99,7 @@ export function createUI({ root, bus }) {
     const text = scoreText(value);
     if (s.num.textContent !== text) s.num.textContent = text;
     s.bar.style.transform = `scaleX(${Number.isFinite(value) ? clamp(value / 10).toFixed(4) : 0})`;
+    updateTug();
   }
 
   function resetCards() {
@@ -174,8 +207,18 @@ export function createUI({ root, bus }) {
       r.dims[res.loser].classList.add('on');
     } else {
       for (const side of SIDES) r.dims[side].classList.add('on');
-      bus.emit('notice', { text: 'Ничья', ms: 0 });
     }
+  });
+
+  // Win streak (king of the hill): shown next to the player's label from 2 wins on.
+  bus.on('streak', (streak) => {
+    for (const side of SIDES) score[side].streak.textContent = streak[side] >= 2 ? `×${streak[side]} подряд` : '';
+  });
+
+  bus.on('record', ({ value }) => {
+    hasRecord = Number.isFinite(value);
+    r.recordValue.textContent = scoreText(value);
+    setVisible('record', (VISIBLE[state] || []).includes('record'));
   });
 
   bus.on('series', ({ L, R }) => {

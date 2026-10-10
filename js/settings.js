@@ -66,7 +66,7 @@ const ROWS = [
 ];
 
 // Hidden settings sheet, opened by a 1.5 s press on the empty top-left corner.
-export function createSettingsSheet({ root, settings, bus, getCameras, getStatus, version }) {
+export function createSettingsSheet({ root, settings, bus, getCameras, getStatus, version, actions = [] }) {
   let open = false;
   let statusTimer = 0;
 
@@ -92,6 +92,16 @@ export function createSettingsSheet({ root, settings, bus, getCameras, getStatus
       }
       return el('div', { class: 'setting' }, [el('span', { text: row.label }), seg]);
     });
+
+    // One-off actions, e.g. resetting the record of the day.
+    for (const action of actions) {
+      const b = el('button', { type: 'button', text: action.button });
+      onTap(b, () => {
+        action.run();
+        b.textContent = action.done || action.button;
+      });
+      rows.push(el('div', { class: 'setting' }, [el('span', { text: action.label }), el('div', { class: 'seg' }, [b])]));
+    }
 
     const status = el('p', { class: 'sheet-status' });
     const refresh = () => {

@@ -9,8 +9,9 @@ import { createUI } from './render-ui.js';
 import { createLineRenderer } from './render-lines.js';
 import { createAudio } from './audio.js';
 import { createDuelMode } from './modes/duel.js';
+import { createRecord } from './record.js';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';
 
 const MESSAGES = {
   insecure: [
@@ -51,7 +52,8 @@ const audio = createAudio({ bus, settings });
 const assigner = createAssigner();
 const players = { L: createPlayerMetrics(), R: createPlayerMetrics() };
 const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, getTracker: () => tracker });
-const mode = createDuelMode({ bus, settings, slots: assigner.slots, players });
+const record = createRecord();
+const mode = createDuelMode({ bus, settings, slots: assigner.slots, players, record });
 
 let tracker = null;
 let trackerPromise = null;
@@ -62,6 +64,17 @@ const sheet = createSettingsSheet({
   bus,
   version: VERSION,
   getCameras: () => camera.list(),
+  actions: [
+    {
+      label: 'Рекорд дня',
+      button: 'Сбросить',
+      done: 'Сброшен',
+      run: () => {
+        record.reset();
+        bus.emit('record', { value: null });
+      },
+    },
+  ],
   getStatus: () => {
     const s = tracker?.stats;
     const c = camera.info;
