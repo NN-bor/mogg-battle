@@ -23,6 +23,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Every JS module is cached for offline use
+        run: |
+          missing=0
+          for f in $(find js -name '*.js' | sort); do
+            grep -q "'$f'" sw.js || { echo "::error::$f is not in APP_FILES in sw.js"; missing=1; }
+          done
+          exit $missing
       - run: node scripts/fetch-assets.mjs
       - name: Push site to gh-pages
         env:
