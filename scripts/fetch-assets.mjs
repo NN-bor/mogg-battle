@@ -17,6 +17,7 @@ const FORCE = process.argv.includes('--force');
 const MEDIAPIPE = '0.10.35';
 const INTER = '5.3.0';
 const JBMONO = '5.3.0';
+const ARCHIVO = '5.3.0';
 
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
@@ -42,6 +43,14 @@ const PACKAGES = [
       'package/files/inter-latin-opsz-normal.woff2': 'fonts/inter-latin-opsz-normal.woff2',
       'package/files/inter-cyrillic-opsz-normal.woff2': 'fonts/inter-cyrillic-opsz-normal.woff2',
       'package/LICENSE': 'fonts/LICENSE-Inter.txt',
+    },
+  ],
+  [
+    // Wide display face for the MOGGED! band (variable: wdth 62–125, wght 100–900).
+    npmTarball('@fontsource-variable', 'archivo', ARCHIVO),
+    {
+      'package/files/archivo-latin-wdth-normal.woff2': 'fonts/archivo-latin-wdth-normal.woff2',
+      'package/LICENSE': 'fonts/LICENSE-Archivo.txt',
     },
   ],
   [
