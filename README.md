@@ -33,10 +33,11 @@ npm start            # = node scripts/serve.mjs --open
 
 ## Выкладка
 
-### GitHub Pages (рекомендую: репозиторий уже на GitHub)
+### GitHub Pages (уже развёрнуто)
 
-1. Settings → Pages → Source: **GitHub Actions**.
-2. Слейте ветку в `main`. Workflow `.github/workflows/pages.yml` сам скачает ассеты и опубликует сайт на `https://<user>.github.io/mogg-battle/`.
+Адрес: **https://nn-bor.github.io/mogg-battle/**
+
+Сайт лежит в ветке `gh-pages` (код + скачанные ассеты), Pages настроен на «Deploy from a branch → gh-pages / root». При каждом пуше в `main` workflow `.github/workflows/pages.yml` сам скачивает ассеты и перезаписывает `gh-pages`, ничего нажимать не нужно. Если Pages вдруг выключен: Settings → Pages → Source: Deploy from a branch → `gh-pages`, `/ (root)`.
 
 Все пути в приложении относительные, поэтому оно работает и из подпапки.
 
@@ -75,7 +76,7 @@ Wake Lock держит экран включённым, пока приложе�
 
 1. **Разрешение и масштаб Windows неизвестны.** Интерфейс построен на `vh` и не зависит от разрешения, canvas-оверлей рендерится не выше 1920×1080 и растягивается CSS.
 2. **Камера неизвестна** (встроенная или USB, угол обзора, высота). Детектор ищет лица по всему кадру на трёх масштабах, отображение кадрирует игроков само. Камеру можно выбрать в настройках.
-3. **Хостинг.** GitHub Pages через Actions, плюс инструкция для Cloudflare Pages и локальный `start.bat`.
+3. **Хостинг.** GitHub Pages (ветка `gh-pages`, обновляется из `main` через Actions), плюс инструкция для Cloudflare Pages и локальный `start.bat`.
 4. **Язык.** Интерфейс на русском. Названия метрик (JAWLINE, CANTHAL TILT…) живут только в коде и в `?debug`.
 5. **Звук** включён по умолчанию и тихий. Выключается в настройках.
 

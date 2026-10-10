@@ -1,7 +1,7 @@
-# Publishes the app to GitHub Pages. Binary assets are not in git:
-# the workflow fetches them (scripts/fetch-assets.mjs) and uploads the folder as is.
-# One-time setup: repo Settings → Pages → Source: GitHub Actions.
-name: Deploy to GitHub Pages
+# Publishes the app to GitHub Pages via the gh-pages branch.
+# Binary assets are not in git: the workflow fetches them (scripts/fetch-assets.mjs),
+# then force-pushes the ready site to gh-pages. Pages source: "Deploy from a branch" → gh-pages / root.
+name: Publish to GitHub Pages
 
 on:
   push:
@@ -9,29 +9,33 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  publish:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: node scripts/fetch-assets.mjs
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Push site to gh-pages
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SITE="$RUNNER_TEMP/site"
+          mkdir -p "$SITE"
+          rsync -a --exclude .git --exclude .github --exclude scripts --exclude .gitignore --exclude .gitattributes ./ "$SITE/"
+          touch "$SITE/.nojekyll"
+          cd "$SITE"
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -f
+          git commit -q -m "Deploy ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
