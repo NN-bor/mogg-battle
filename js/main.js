@@ -15,7 +15,7 @@ import { createStill } from './still.js';
 import { createAura } from './aura.js';
 import { FACE_OVAL } from './face.js';
 
-export const VERSION = '1.7.0';
+export const VERSION = '1.7.1';
 
 const MESSAGES = {
   insecure: [
