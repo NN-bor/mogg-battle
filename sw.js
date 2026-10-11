@@ -3,7 +3,7 @@
 //  - heavy assets (wasm, model, fonts; cache-first, versioned by the pinned packages).
 // After the first visit the app makes no network requests at all.
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const ASSET_VERSION = 'mp-0.10.35-inter-5.3.0';
 const APP_CACHE = `mog-app-${APP_VERSION}`;
 const ASSET_CACHE = `mog-assets-${ASSET_VERSION}`;
@@ -24,6 +24,7 @@ const APP_FILES = [
   'js/assign.js',
   'js/aura.js',
   'js/cameo.js',
+  'js/look.js',
   'js/face.js',
   'js/metrics.js',
   'js/score.js',
@@ -46,6 +47,7 @@ const ASSET_FILES = [
   'vendor/mediapipe/wasm/vision_wasm_internal.js',
   'vendor/mediapipe/wasm/vision_wasm_internal.wasm',
   'models/face_landmarker.task',
+  'models/selfie_segmenter.tflite',
   'fonts/inter-latin-opsz-normal.woff2',
   'fonts/inter-cyrillic-opsz-normal.woff2',
   'fonts/jetbrains-mono-latin-500-normal.woff2',

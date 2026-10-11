@@ -11,6 +11,7 @@ export const DEFAULTS = Object.freeze({
   sound: true,
   fps: false,
   chicken: true,     // Chicken Gun cameo now and then during a round
+  look: 'combo',     // background: 'combo' (lights down in a round, poster on the result) | 'live'
   detector: 'auto',  // 'auto' | 256 | 320 | 384 | 480 (detector tile per player, px)
 });
 
@@ -59,6 +60,14 @@ const ROWS = [
   },
   { key: 'sound', label: 'Звук', options: onOff },
   { key: 'chicken', label: 'Курица', options: onOff },
+  {
+    key: 'look',
+    label: 'Фон',
+    options: [
+      { value: 'combo', label: 'Комбо' },
+      { value: 'live', label: 'Как есть' },
+    ],
+  },
   {
     key: 'detector',
     label: 'Детектор, px на игрока',
