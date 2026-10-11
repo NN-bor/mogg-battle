@@ -127,6 +127,7 @@ export function createPlayerMetrics() {
   const s = {
     q: null,        // smoothed metric values 0..1
     read: null,     // smoothed raw readouts (debug: mog.players.L.read)
+    live: null,     // this frame's raw signals, for events (aura popups)
     lastT: 0,
     blink: { closed: false, last: 0, base: 0.15 },
     hist: [],
@@ -138,6 +139,7 @@ export function createPlayerMetrics() {
   function reset(t = performance.now()) {
     s.q = null;
     s.read = null;
+    s.live = null;
     s.lastT = 0;
     s.blink = { closed: false, last: t, base: 0.15 };
     s.hist = [];
@@ -256,7 +258,18 @@ export function createPlayerMetrics() {
       AURA: clamp(0.4 * still + 0.3 * mouthClosed + 0.3 * serious) * turnPenalty,
     };
     const read = { ...g, neutral, still, motion: s.hist.length >= 6 ? 1 - still : 0, yaw: pose.yaw, pitch: pose.pitch, roll: pose.roll, averaged: averaged ? 1 : 0 };
-    return { q, read };
+    const live = {
+      t,
+      blinking: s.blink.closed,
+      lastBlink: s.blink.last, // when the eyes last closed or reopened
+      smile,
+      jawOpen: bs.jawOpen || 0,
+      brow,
+      still: s.hist.length >= 6 ? still : 0,
+      turn,
+      gaze: gazeDirect,
+    };
+    return { q, read, live };
   }
 
   function update(face, t, aspect) {
@@ -264,6 +277,7 @@ export function createPlayerMetrics() {
     const dt = s.lastT ? Math.min(t - s.lastT, 250) : 33;
     s.lastT = t;
     const m = measure(face, t, dt, aspect);
+    s.live = m.live;
     if (!s.q) {
       s.q = { ...m.q };
       s.read = { ...m.read };
@@ -305,6 +319,9 @@ export function createPlayerMetrics() {
     },
     get read() {
       return s.read;
+    },
+    get live() {
+      return s.live;
     },
   };
 }
