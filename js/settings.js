@@ -10,6 +10,7 @@ export const DEFAULTS = Object.freeze({
   noise: 0.08,       // ± score noise per metric
   sound: true,
   fps: false,
+  chicken: true,     // Chicken Gun cameo now and then during a round
   detector: 'auto',  // 'auto' | 256 | 320 | 384 | 480 (detector tile per player, px)
 });
 
@@ -57,6 +58,7 @@ const ROWS = [
     options: [0, 0.04, 0.08, 0.12].map((v) => ({ value: v, label: v ? `±${Math.round(v * 100)}%` : 'Нет' })),
   },
   { key: 'sound', label: 'Звук', options: onOff },
+  { key: 'chicken', label: 'Курица', options: onOff },
   {
     key: 'detector',
     label: 'Детектор, px на игрока',

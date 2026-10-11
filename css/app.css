@@ -421,6 +421,17 @@ button:focus { outline: none; }
 .pop.big b,
 .pop.big span { font-size: 5.2vh; }
 
+/* ───────────── Chicken cameo (js/cameo.js) ───────────── */
+.cameo-layer { pointer-events: none; overflow: hidden; }
+.cameo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+.cameo img { display: block; width: 100%; height: 100%; }
+
 /* ───────────── Idle: the attract headline under the ovals ───────────── */
 .attract {
   position: absolute;
