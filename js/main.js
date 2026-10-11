@@ -13,9 +13,10 @@ import { createRecord } from './record.js';
 import { createStabilizer } from './stabilize.js';
 import { createStill } from './still.js';
 import { createAura } from './aura.js';
+import { createCameo } from './cameo.js';
 import { FACE_OVAL } from './face.js';
 
-export const VERSION = '1.7.1';
+export const VERSION = '1.8.0';
 
 const MESSAGES = {
   insecure: [
@@ -62,6 +63,7 @@ const stabOwner = { L: { epoch: -1, seen: -1e9 }, R: { epoch: -1, seen: -1e9 } }
 const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, stab, getTracker: () => tracker });
 const still = createStill({ canvas: document.getElementById('still'), source: screenCanvas, view, lines, bus });
 const aura = createAura({ layer: document.getElementById('aura'), bus, players, getBox: faceBox });
+const cameo = createCameo({ layer: document.getElementById('cameo'), bus, settings });
 const record = createRecord();
 const mode = createDuelMode({ bus, settings, slots: assigner.slots, players, record });
 
@@ -353,6 +355,6 @@ window.addEventListener('resize', () => {
 });
 // ?debug exposes internals in the console (window.mog) for tuning CAL in metrics.js.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, aura, get tracker() { return tracker; } };
+  window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, aura, cameo, get tracker() { return tracker; } };
 }
 boot();

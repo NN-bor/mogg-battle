@@ -3,7 +3,7 @@
 //  - heavy assets (wasm, model, fonts; cache-first, versioned by the pinned packages).
 // After the first visit the app makes no network requests at all.
 
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.8.0';
 const ASSET_VERSION = 'mp-0.10.35-inter-5.3.0';
 const APP_CACHE = `mog-app-${APP_VERSION}`;
 const ASSET_CACHE = `mog-assets-${ASSET_VERSION}`;
@@ -23,6 +23,7 @@ const APP_FILES = [
   'js/tracker.js',
   'js/assign.js',
   'js/aura.js',
+  'js/cameo.js',
   'js/face.js',
   'js/metrics.js',
   'js/score.js',
@@ -33,6 +34,7 @@ const APP_FILES = [
   'js/record.js',
   'js/stabilize.js',
   'js/still.js',
+  'img/chicken.webp',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',
