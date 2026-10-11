@@ -14,9 +14,10 @@ import { createStabilizer } from './stabilize.js';
 import { createStill } from './still.js';
 import { createAura } from './aura.js';
 import { createCameo } from './cameo.js';
+import { createLook } from './look.js';
 import { FACE_OVAL } from './face.js';
 
-export const VERSION = '1.8.0';
+export const VERSION = '1.9.0';
 
 const MESSAGES = {
   insecure: [
@@ -61,7 +62,8 @@ const players = { L: createPlayerMetrics(), R: createPlayerMetrics() };
 const stab = { L: createStabilizer(), R: createStabilizer() };
 const stabOwner = { L: { epoch: -1, seen: -1e9 }, R: { epoch: -1, seen: -1e9 } };
 const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, stab, getTracker: () => tracker });
-const still = createStill({ canvas: document.getElementById('still'), source: screenCanvas, view, lines, bus });
+const look = createLook({ view, bus, settings, screen: screenCanvas });
+const still = createStill({ canvas: document.getElementById('still'), source: screenCanvas, view, lines, bus, look });
 const aura = createAura({ layer: document.getElementById('aura'), bus, players, getBox: faceBox });
 const cameo = createCameo({ layer: document.getElementById('cameo'), bus, settings });
 const record = createRecord();
@@ -157,6 +159,7 @@ async function boot() {
     ]).catch(() => {});
     mode.start();
     startLoop();
+    look.init(); // person cutout for the background; loads in the background, never blocks
   } catch (err) {
     fail(err);
   } finally {
@@ -180,7 +183,11 @@ function detectFrame(now) {
   if (video.readyState < 2) return;
   view.update(now);
   view.paint();
-  if (!tracker) return;
+  if (tracker) track(now);
+  look.compose(view.picture, now);
+}
+
+function track(now) {
   const faces = tracker.detect(video, now);
   if (!faces) {
     // Skipped by the detector (slow panel): carry each mask forward to this frame.
@@ -203,6 +210,7 @@ function detectFrame(now) {
     players[side].update(slots[side].face, now, view.vaspect);
   }
   view.frame(slots, ROUND_STATES.has(mode.state), now);
+  look.segment(slots, video, tracker.stats.skip);
   bus.emit('frame', { now, slots, players });
 }
 
@@ -232,10 +240,16 @@ function frame(now) {
     const s = tracker?.stats;
     ui.setFps(
       settings.get('fps') && s
-        ? `${s.app} fps  ·  det ${s.det}  ·  ${s.ms.toFixed(1)} ms  ·  ${s.input}  ·  ${s.delegate}${s.skip > 1 ? `  ·  skip ${s.skip}` : ''}`
+        ? `${s.app} fps  ·  det ${s.det}  ·  ${s.ms.toFixed(1)} ms  ·  ${s.input}  ·  ${s.delegate}${s.skip > 1 ? `  ·  skip ${s.skip}` : ''}${lookInfo()}`
         : null
     );
   }
+}
+
+function lookInfo() {
+  const l = look.stats;
+  if (!l.ready) return '';
+  return l.live ? '  ·  фон: живой (медленно)' : l.ms ? `  ·  вырезка ${l.ms.toFixed(1)} ms` : '';
 }
 
 function startLoop() {
@@ -351,10 +365,12 @@ function registerServiceWorker() {
 
 window.addEventListener('resize', () => {
   view.resize(); // resizing clears the canvases: repaint the current frame at once
-  if (video.readyState >= 2) view.paint();
+  if (video.readyState < 2) return;
+  view.paint();
+  look.compose(view.picture, performance.now());
 });
 // ?debug exposes internals in the console (window.mog) for tuning CAL in metrics.js.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, aura, cameo, get tracker() { return tracker; } };
+  window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, aura, cameo, look, get tracker() { return tracker; } };
 }
 boot();

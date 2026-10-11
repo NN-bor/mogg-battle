@@ -21,6 +21,9 @@ const ARCHIVO = '5.3.0';
 
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+// Person cutout for the "combo" background (players lit, room dimmed).
+const SEGMENTER_URL =
+  'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite';
 
 const npmTarball = (scope, name, version) =>
   `https://registry.npmjs.org/${scope}/${name}/-/${name}-${version}.tgz`;
@@ -62,7 +65,10 @@ const PACKAGES = [
   ],
 ];
 
-const FILES = [[MODEL_URL, 'models/face_landmarker.task']];
+const FILES = [
+  [MODEL_URL, 'models/face_landmarker.task'],
+  [SEGMENTER_URL, 'models/selfie_segmenter.tflite'],
+];
 
 async function exists(rel) {
   try {
@@ -150,7 +156,7 @@ async function main() {
   await save(
     'vendor/mediapipe/NOTICE.txt',
     Buffer.from(
-      `@mediapipe/tasks-vision ${MEDIAPIPE} and face_landmarker.task\n` +
+      `@mediapipe/tasks-vision ${MEDIAPIPE}, face_landmarker.task and selfie_segmenter.tflite\n` +
         'Copyright Google LLC. Licensed under the Apache License, Version 2.0.\n' +
         'https://github.com/google-ai-edge/mediapipe/blob/master/LICENSE\n'
     )

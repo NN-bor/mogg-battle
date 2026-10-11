@@ -15,8 +15,9 @@ const ZOOM = { win: 1.2, draw: 1.06 };
 const SHAKE = { ms: 380, amp: 1.2, hz: 13, tau: 110 }; // amp in vh
 const WIPE_AFTER = 600;                   // release: clear the frame once the fade is over
 
-// source: the screen canvas (view.js), i.e. exactly the picture that is on screen.
-export function createStill({ canvas, source, view, lines, bus }) {
+// source: the screen canvas, i.e. exactly the picture that is on screen.
+// look: the background (look.js); with "combo" the frame drains into its halftone poster.
+export function createStill({ canvas, source, view, lines, bus, look }) {
   const ctx = canvas.getContext('2d');
   const color = document.createElement('canvas');
   const gray = document.createElement('canvas');
@@ -39,9 +40,13 @@ export function createStill({ canvas, source, view, lines, bus }) {
     for (const c of [canvas, color, gray]) fit(c, cw, ch);
     color.getContext('2d').drawImage(source, 0, 0);
     const g = gray.getContext('2d');
-    g.filter = GRAY;
-    g.drawImage(color, 0, 0);
-    g.filter = 'none';
+    const poster = look?.poster(view.picture);
+    if (poster) g.drawImage(poster, 0, 0);
+    else {
+      g.filter = GRAY;
+      g.drawImage(color, 0, 0);
+      g.filter = 'none';
+    }
 
     const [ox, oy] = lines.freeze(res);
     const still = reduced.matches;
