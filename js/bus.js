@@ -5,6 +5,7 @@
 //   state            {from, to, data}            fsm transitions of the active mode
 //   frame            {now, slots, players}       every detector result after assignment
 //   attract          {title, sub}                idle headline: who is missing
+//   aura             {side, value, tag}          an aura popup was shown (sound)
 //   notice           {text}                      one-line message above the action slot
 //   round:meta       {key, label, mult, hint}   round bonus; the UI shows only the hint
 //   round:countdown  {n}

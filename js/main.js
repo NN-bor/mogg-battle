@@ -12,8 +12,10 @@ import { createDuelMode } from './modes/duel.js';
 import { createRecord } from './record.js';
 import { createStabilizer } from './stabilize.js';
 import { createStill } from './still.js';
+import { createAura } from './aura.js';
+import { FACE_OVAL } from './face.js';
 
-export const VERSION = '1.6.0';
+export const VERSION = '1.7.0';
 
 const MESSAGES = {
   insecure: [
@@ -59,6 +61,7 @@ const stab = { L: createStabilizer(), R: createStabilizer() };
 const stabOwner = { L: { epoch: -1, seen: -1e9 }, R: { epoch: -1, seen: -1e9 } };
 const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, stab, getTracker: () => tracker });
 const still = createStill({ canvas: document.getElementById('still'), source: screenCanvas, view, lines, bus });
+const aura = createAura({ layer: document.getElementById('aura'), bus, players, getBox: faceBox });
 const record = createRecord();
 const mode = createDuelMode({ bus, settings, slots: assigner.slots, players, record });
 
@@ -93,6 +96,23 @@ const sheet = createSettingsSheet({
     };
   },
 });
+
+// Face box on screen (CSS px) from the stabilized mask, for the aura popups.
+function faceBox(side) {
+  const st = stab[side];
+  if (!st.ready || !assigner.slots[side].present) return null;
+  const k = view.sw / view.cw;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const i of FACE_OVAL) {
+    const [nx, ny] = st.point(i);
+    const x = view.x(nx) * k, y = view.y(ny) * k;
+    x0 = Math.min(x0, x);
+    x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+}
 
 // ───── boot ─────
 function ensureTracker() {
@@ -333,6 +353,6 @@ window.addEventListener('resize', () => {
 });
 // ?debug exposes internals in the console (window.mog) for tuning CAL in metrics.js.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, get tracker() { return tracker; } };
+  window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, aura, get tracker() { return tracker; } };
 }
 boot();

@@ -41,7 +41,8 @@
   --hairline: rgba(255, 255, 255, 0.14);
   --panel: rgba(10, 10, 11, 0.64);
   --accent: #4d8dff;   /* the winner: score, bar, tag, card outline, key line */
-  --mog: #ff3b30;      /* the loser: the strike through the eyes, nothing else */
+  --mog: #ff3b30;      /* the loser: the strike through the eyes; aura losses */
+  --gold: #ffd60a;     /* aura gains: game reward colour, used by the popups only */
 
   --scrim: rgba(10, 10, 11, 0.32);   /* flat darkening of the video */
 
@@ -353,6 +354,76 @@ button:focus { outline: none; }
   letter-spacing: -0.05em;
   font-variant-numeric: tabular-nums;
   opacity: 0;
+}
+
+/* ───────────── Aura popups: game-style floating text (js/aura.js) ─────────────
+   Deliberately not system UI: wide heavy italic caps with a thick dark outline,
+   like damage numbers in a game. Gains gold and floating up, losses red and dropping. */
+.aura-layer { pointer-events: none; overflow: hidden; }
+.pop {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: 'Archivo', var(--font);
+  font-stretch: 125%;
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+.pop-in {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6vh;
+}
+.pop-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1.1vh;
+  transform: skewX(-10deg);
+}
+.pop b,
+.pop span,
+.pop em {
+  -webkit-text-stroke: var(--stroke) #0a0a0b;
+  paint-order: stroke fill;
+}
+.pop b {
+  --stroke: 1.3vh;
+  font-size: 8vh;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.pop span {
+  --stroke: 0.8vh;
+  font-size: 3.8vh;
+  font-weight: 900;
+  line-height: 1;
+}
+.pop em {
+  --stroke: 0.6vh;
+  font-style: normal;
+  font-size: 2.4vh;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  transform: skewX(-10deg);
+}
+.pop.plus b, .pop.plus span { color: var(--gold); }
+.pop.minus b, .pop.minus span { color: var(--mog); }
+.pop.big b { --stroke: 1.6vh; font-size: 11vh; }
+.pop.big span { font-size: 4.6vh; }
+.pop-burst {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 34vh;
+  height: 34vh;
+  overflow: visible;
+  stroke: var(--gold);
+  stroke-width: 3.2;
+  stroke-linecap: round;
 }
 
 /* ───────────── Idle: the attract headline under the ovals ───────────── */

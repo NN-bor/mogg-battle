@@ -62,6 +62,13 @@ export function createAudio({ bus, settings }) {
       tone({ freq: f, to: f * 1.06, gain: 0.08, decay: 0.22 });
     },
     go: () => tone({ freq: 659, to: 988, gain: 0.07, attack: 0.01, decay: 0.32 }),
+    // Aura popups: a two-note coin for gains (three for big ones), a dull bonk for losses.
+    auraUp: (big) => {
+      tone({ freq: 1175, type: 'triangle', gain: 0.05, decay: 0.07 });
+      tone({ freq: 1760, type: 'triangle', gain: 0.05, decay: big ? 0.1 : 0.16, at: 0.06 });
+      if (big) tone({ freq: 2349, type: 'triangle', gain: 0.045, decay: 0.2, at: 0.12 });
+    },
+    auraDown: () => tone({ freq: 300, to: 140, type: 'triangle', gain: 0.09, attack: 0.003, decay: 0.16 }),
     thud: () => {
       tone({ freq: 120, to: 42, gain: 0.5, attack: 0.005, decay: 0.45 });
       noise({ gain: 0.12, decay: 0.09, cutoff: 320 });
@@ -76,6 +83,7 @@ export function createAudio({ bus, settings }) {
   bus.on('round:scan', () => play('go'));
   bus.on('round:lock', ({ isLast }) => play('tick', isLast));
   bus.on('round:result', () => play('thud'));
+  bus.on('aura', ({ value }) => play(value > 0 ? 'auraUp' : 'auraDown', Math.abs(value) >= 1000));
 
   return { unlock, play };
 }
