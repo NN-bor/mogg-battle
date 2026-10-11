@@ -3,7 +3,7 @@
 //  - heavy assets (wasm, model, fonts; cache-first, versioned by the pinned packages).
 // After the first visit the app makes no network requests at all.
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 const ASSET_VERSION = 'mp-0.10.35-inter-5.3.0';
 const APP_CACHE = `mog-app-${APP_VERSION}`;
 const ASSET_CACHE = `mog-assets-${ASSET_VERSION}`;

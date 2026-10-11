@@ -42,7 +42,6 @@
   --panel: rgba(10, 10, 11, 0.64);
   --accent: #4d8dff;   /* the winner: score, bar, tag, card outline, key line */
   --mog: #ff3b30;      /* the loser: the strike through the eyes; aura losses */
-  --gold: #ffd60a;     /* aura gains: game reward colour, used by the popups only */
 
   --scrim: rgba(10, 10, 11, 0.32);   /* flat darkening of the video */
 
@@ -356,75 +355,71 @@ button:focus { outline: none; }
   opacity: 0;
 }
 
-/* ───────────── Aura popups: game-style floating text (js/aura.js) ─────────────
-   Deliberately not system UI: wide heavy italic caps with a thick dark outline,
-   like damage numbers in a game. Gains gold and floating up, losses red and dropping. */
+/* ───────────── Aura feed (js/aura.js) ─────────────
+   The MOGGED! band's language: hard-edged blocks, wide caps, no tilt, no outline.
+   Gains: white block. Losses: black block, red number. Stacked above the head. */
 .aura-layer { pointer-events: none; overflow: hidden; }
-.pop {
+.feed {
   position: absolute;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column-reverse; /* newest (first child) at the bottom, next to the head */
+  align-items: center;
+  gap: 0.8vh;
+  will-change: transform;
+}
+.pop {
+  position: relative;
   font-family: 'Archivo', var(--font);
   font-stretch: 125%;
   white-space: nowrap;
-  will-change: transform, opacity;
+  color: var(--text);
 }
-.pop-in {
+.pop-bg {
+  position: absolute;
+  inset: 0;
+  background: #000;
+}
+.pop-txt {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6vh;
+  gap: 0.7vh;
+  padding: 1.1vh 2vh 1.2vh;
 }
 .pop-row {
   display: flex;
   align-items: baseline;
-  gap: 1.1vh;
-  transform: skewX(-10deg);
-}
-.pop b,
-.pop span,
-.pop em {
-  -webkit-text-stroke: var(--stroke) #0a0a0b;
-  paint-order: stroke fill;
+  gap: 1vh;
 }
 .pop b {
-  --stroke: 1.3vh;
-  font-size: 8vh;
+  font-size: 4vh;
   font-weight: 900;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
 .pop span {
-  --stroke: 0.8vh;
-  font-size: 3.8vh;
-  font-weight: 900;
+  font-size: 4vh;
+  font-weight: 500;
   line-height: 1;
 }
 .pop em {
-  --stroke: 0.6vh;
   font-style: normal;
-  font-size: 2.4vh;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: var(--text);
-  transform: skewX(-10deg);
+  font-size: 1.6vh;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  opacity: 0.7;
 }
-.pop.plus b, .pop.plus span { color: var(--gold); }
-.pop.minus b, .pop.minus span { color: var(--mog); }
-.pop.big b { --stroke: 1.6vh; font-size: 11vh; }
-.pop.big span { font-size: 4.6vh; }
-.pop-burst {
-  position: absolute;
-  left: 50%;
-  top: 42%;
-  width: 34vh;
-  height: 34vh;
-  overflow: visible;
-  stroke: var(--gold);
-  stroke-width: 3.2;
-  stroke-linecap: round;
-}
+.pop.plus { color: var(--bg); }
+.pop.plus .pop-bg { background: var(--text); }
+.pop.minus b,
+.pop.minus span { color: var(--mog); }
+.pop.big b,
+.pop.big span { font-size: 5.2vh; }
 
 /* ───────────── Idle: the attract headline under the ovals ───────────── */
 .attract {

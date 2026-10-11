@@ -62,13 +62,15 @@ export function createAudio({ bus, settings }) {
       tone({ freq: f, to: f * 1.06, gain: 0.08, decay: 0.22 });
     },
     go: () => tone({ freq: 659, to: 988, gain: 0.07, attack: 0.01, decay: 0.32 }),
-    // Aura popups: a two-note coin for gains (three for big ones), a dull bonk for losses.
+    // Aura labels: a short clean ping for gains (two for big ones), a low muted knock for losses.
     auraUp: (big) => {
-      tone({ freq: 1175, type: 'triangle', gain: 0.05, decay: 0.07 });
-      tone({ freq: 1760, type: 'triangle', gain: 0.05, decay: big ? 0.1 : 0.16, at: 0.06 });
-      if (big) tone({ freq: 2349, type: 'triangle', gain: 0.045, decay: 0.2, at: 0.12 });
+      tone({ freq: 1568, gain: 0.05, attack: 0.002, decay: 0.09 });
+      if (big) tone({ freq: 2093, gain: 0.04, attack: 0.002, decay: 0.14, at: 0.05 });
     },
-    auraDown: () => tone({ freq: 300, to: 140, type: 'triangle', gain: 0.09, attack: 0.003, decay: 0.16 }),
+    auraDown: () => {
+      tone({ freq: 170, to: 85, gain: 0.14, attack: 0.003, decay: 0.14 });
+      noise({ gain: 0.04, decay: 0.035, cutoff: 900 });
+    },
     thud: () => {
       tone({ freq: 120, to: 42, gain: 0.5, attack: 0.005, decay: 0.45 });
       noise({ gain: 0.12, decay: 0.09, cutoff: 320 });
