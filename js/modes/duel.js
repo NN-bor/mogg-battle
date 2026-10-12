@@ -30,7 +30,8 @@ const ATTRACT = {
   solo: { title: 'Кто против?', sub: 'Второй игрок — в свободный овал' },
 };
 
-export function createDuelMode({ bus, settings, slots, players, record }) {
+// attractFor(slots) → {title, sub} or null: the remote duel's own idle headline.
+export function createDuelMode({ bus, settings, slots, players, record, attractFor }) {
   let series = { L: 0, R: 0 };
   let streak = { L: 0, R: 0 };
   const owner = { L: null, R: null }; // slot epoch each streak belongs to
@@ -45,7 +46,7 @@ export function createDuelMode({ bus, settings, slots, players, record }) {
   const present = () => SIDES.filter((s) => slots[s].present).length;
   const stable = () => SIDES.every((s) => slots[s].present && slots[s].presentFor >= T.stable);
   const lost = () => SIDES.some((s) => slots[s].missingFor > T.lost);
-  const attract = () => bus.emit('attract', present() === 1 ? ATTRACT.solo : ATTRACT.empty);
+  const attract = () => bus.emit('attract', attractFor?.(slots) || (present() === 1 ? ATTRACT.solo : ATTRACT.empty));
 
   function setSeries(L, R) {
     series = { L, R };
@@ -148,7 +149,8 @@ export function createDuelMode({ bus, settings, slots, players, record }) {
       meta: {
         enter() {
           challenger = false;
-          meta = pickMeta(lastMetaKey);
+          // seed: the gags of this round (cameo.js), the same on both screens of a remote duel
+          meta = { ...pickMeta(lastMetaKey), seed: (Math.random() * 2 ** 32) >>> 0 };
           lastMetaKey = meta.key;
           bus.emit('round:meta', meta);
           fsm.after(T.meta, () => fsm.go('countdown'));

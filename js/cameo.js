@@ -17,6 +17,16 @@ const CHANCE = 0.4;         // share of rounds with a cameo
 const REST = 1;             // rounds without a cameo after one
 const ROUND = new Set(['meta', 'countdown', 'scan', 'reveal', 'result']);
 
+// Small seeded generator (mulberry32): the round's seed picks the same gag on both screens.
+function seeded(a) {
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // getJaw(side) → {x, y, faceH} in CSS px: the player's outer jaw corner, or null.
 export function createCameo({ layer, bus, settings, getJaw }) {
   for (const src of [SRC, HAMMER.src]) new Image().src = src; // warm the cache
@@ -26,6 +36,7 @@ export function createCameo({ layer, bus, settings, getJaw }) {
   let timer = 0;
   let live = null;
   let hits = [];
+  let rand = Math.random;
 
   const vh = () => window.innerHeight / 100;
 
@@ -140,7 +151,7 @@ export function createCameo({ layer, bus, settings, getJaw }) {
     hop() {
       const h = 26 * vh(), w = h * ASPECT;
       const node = spawn(h);
-      const ltr = Math.random() < 0.5;
+      const ltr = rand() < 0.5;
       const x0 = ltr ? -w : window.innerWidth, x1 = ltr ? window.innerWidth : -w;
       const y = window.innerHeight - h + 1.5 * vh();
       const hops = 7, frames = [];
@@ -159,7 +170,7 @@ export function createCameo({ layer, bus, settings, getJaw }) {
     peek() {
       const h = 32 * vh(), w = h * ASPECT;
       const node = spawn(h);
-      const left = Math.random() < 0.5;
+      const left = rand() < 0.5;
       const y = window.innerHeight * 0.58 - h / 2;
       const hide = left ? -w : window.innerWidth;
       const show = left ? -w * 0.32 : window.innerWidth - w * 0.68;
@@ -183,7 +194,7 @@ export function createCameo({ layer, bus, settings, getJaw }) {
     laugh(res) {
       const h = 30 * vh(), w = h * ASPECT;
       const node = spawn(h);
-      const side = res?.loser || (Math.random() < 0.5 ? 'L' : 'R');
+      const side = res?.loser || (rand() < 0.5 ? 'L' : 'R');
       const x = side === 'L' ? 54 * vh() : window.innerWidth - 54 * vh() - w;
       const down = window.innerHeight, up = window.innerHeight - h + 2 * vh();
       const at = (y, r = 0) => `translate(${x}px, ${y}px) rotate(${r}deg)`;
@@ -198,14 +209,15 @@ export function createCameo({ layer, bus, settings, getJaw }) {
     },
   };
 
-  bus.on('round:meta', () => {
+  bus.on('round:meta', (m) => {
     plan = null;
+    rand = Number.isFinite(m?.seed) ? seeded(m.seed) : Math.random;
     if (rest > 0) {
       rest--;
       return;
     }
-    if (!settings.get('chicken') || reduced.matches || Math.random() > CHANCE) return;
-    const r = Math.random();
+    if (!settings.get('chicken') || reduced.matches || rand() > CHANCE) return;
+    const r = rand();
     plan =
       r < 0.3 ? { action: 'hop', at: 'scan' }
       : r < 0.5 ? { action: 'peek', at: 'scan' }
@@ -226,9 +238,9 @@ export function createCameo({ layer, bus, settings, getJaw }) {
       timer = setTimeout(() => {
         if (p.action !== 'bonk') return ACTIONS[p.action]();
         // A random player who is in frame right now.
-        const sides = ['L', 'R'].filter((s) => getJaw?.(s)).sort(() => Math.random() - 0.5);
-        if (sides.length) ACTIONS.bonk(sides[0]);
-      }, 600 + Math.random() * 1000);
+        const sides = ['L', 'R'].filter((s) => getJaw?.(s));
+        if (sides.length) ACTIONS.bonk(sides[Math.floor(rand() * sides.length)]);
+      }, 600 + rand() * 1000);
     }
   });
 
