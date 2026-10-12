@@ -610,6 +610,12 @@ button:focus { outline: none; }
 .screen[data-kind='done'] .screen-actions { display: none; }
 .screen[data-kind='loading'] .screen-title { animation: breathe 1.6s var(--ease) infinite alternate; }
 @keyframes breathe { from { opacity: 0.35; } to { opacity: 1; } }
+/* Phones held upright: the vh-sized margins would squeeze the text into a column */
+@media (orientation: portrait) {
+  .screen { padding: 8vh 6vw; }
+  .screen-title { font-size: 8vw; }
+  .screen-body { font-size: 4vw; }
+}
 
 /* ───────────── Remote duel by link (js/remote.js) ───────────── */
 /* Camera sources of the glued picture: playing, in the layout, invisible */
