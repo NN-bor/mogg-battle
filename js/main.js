@@ -15,9 +15,11 @@ import { createStill } from './still.js';
 import { createAura } from './aura.js';
 import { createCameo } from './cameo.js';
 import { createLook } from './look.js';
+import { createRemote, remoteFromUrl } from './remote.js';
 import { FACE_OVAL, IDX } from './face.js';
+import { el, onTap } from './util.js';
 
-export const VERSION = '1.10.0';
+export const VERSION = '1.11.0';
 
 const MESSAGES = {
   insecure: [
@@ -48,13 +50,18 @@ const MESSAGES = {
 const root = document.getElementById('app');
 const video = document.getElementById('video');
 const canvas = document.getElementById('overlay');
-const screenCanvas = document.getElementById('screen');
+const screenCanvas = document.getElementById('picture');
+// Remote duel by link (?host / ?join=…): the camera plays into a hidden element and the main
+// video shows the picture glued from both players' cameras (remote.js).
+const remoteUrl = remoteFromUrl();
+const camVideo = remoteUrl ? el('video', { class: 'src-video', muted: true, playsinline: true, autoplay: true }) : video;
+if (remoteUrl) root.append(camVideo);
 
 const bus = createBus();
 const settings = createSettings(bus);
 const ui = createUI({ root, bus });
 const view = createView({ video, canvas, screen: screenCanvas, settings });
-const camera = createCamera({ video, bus });
+const camera = createCamera({ video: camVideo, bus, size: remoteUrl && { w: 1280, h: 720 } });
 const audio = createAudio({ bus, settings });
 const assigner = createAssigner();
 const players = { L: createPlayerMetrics(), R: createPlayerMetrics() };
@@ -67,7 +74,12 @@ const still = createStill({ canvas: document.getElementById('still'), source: sc
 const aura = createAura({ layer: document.getElementById('aura'), bus, players, getBox: faceBox });
 const cameo = createCameo({ layer: document.getElementById('cameo'), bus, settings, getJaw: jawPoint });
 const record = createRecord();
-const mode = createDuelMode({ bus, settings, slots: assigner.slots, players, record });
+const remote = remoteUrl && createRemote({ ...remoteUrl, bus, root, ui, video, camVideo, settings });
+// The guest's round is run by the host; the guest only follows its events.
+const mode =
+  remote?.role === 'guest'
+    ? remote.follower
+    : createDuelMode({ bus, settings, slots: assigner.slots, players, record, attractFor: remote?.attract });
 
 let tracker = null;
 let trackerPromise = null;
@@ -79,6 +91,12 @@ const sheet = createSettingsSheet({
   version: VERSION,
   getCameras: () => camera.list(),
   actions: [
+    {
+      label: 'Игра по ссылке',
+      button: remote ? 'Выйти' : 'Открыть',
+      done: '…',
+      run: () => location.assign(remote ? location.pathname : `${location.pathname}?host`),
+    },
     {
       label: 'Рекорд дня',
       button: 'Сбросить',
@@ -147,6 +165,7 @@ function ensureTracker() {
 
 async function startCamera() {
   const info = await camera.start(settings.get('cameraId'));
+  await remote?.attach();
   screenCanvas.classList.add('live');
   armVideoFrames();
   return info;
@@ -227,6 +246,8 @@ function track(now) {
   }
   view.frame(slots, ROUND_STATES.has(mode.state), now);
   look.segment(slots, video, tracker.stats.skip);
+  // A guest has no duel mode to say who is missing: its own screen does.
+  if (remote?.role === 'guest' && mode.state === 'idle') bus.emit('attract', remote.attract(slots) || { title: 'Кто кого?', sub: 'Сейчас начнём' });
   bus.emit('frame', { now, slots, players });
 }
 
@@ -334,11 +355,18 @@ bus.on('settings', ({ key }) => {
 });
 
 bus.on('ui:retry', () => {
+  if (remote) return location.reload(); // a fresh connection
   clearTimeout(reconnectTimer);
   reconnectTimer = 0;
   boot();
 });
 bus.on('ui:settings', () => sheet.open());
+
+// "Play by link" in idle: only in a browser tab with internet, never in the installed kiosk app.
+const linkButton = document.getElementById('btn-link');
+const kiosk = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+if (!remote && !kiosk && navigator.onLine) root.dataset.net = '';
+onTap(linkButton, () => location.assign(`${location.pathname}?host`));
 // Hidden settings: hold the empty top-left corner for 1.5 s.
 bindLongPress(document.getElementById('hotspot'), 1500, () => sheet.open());
 

@@ -16,9 +16,9 @@
 </head>
 <body>
   <div id="app" data-state="boot">
-    <!-- The camera stream plays here; it is shown through #screen (js/view.js) -->
+    <!-- The camera stream plays here; it is shown through #picture (js/view.js) -->
     <video id="video" muted playsinline autoplay disablepictureinpicture></video>
-    <canvas id="screen" class="layer"></canvas>
+    <canvas id="picture" class="layer"></canvas>
     <!-- Result freeze-frame (js/still.js) -->
     <canvas id="still" class="layer"></canvas>
     <div class="layer scrim"></div>
@@ -51,6 +51,8 @@
       <h2 class="attract-title">Кто кого?</h2>
       <p class="attract-sub">Встаньте вдвоём в овалы</p>
     </div>
+    <!-- Remote duel (js/remote.js); shown in idle in a browser tab with internet -->
+    <button class="btn small secondary link-btn v" id="btn-link" type="button">Играть по ссылке</button>
 
     <footer class="bottom">
       <p class="notice v rise" id="notice"></p>
@@ -79,6 +81,7 @@
       </div>
     </div>
 
+    <div class="rotate" aria-hidden="true">Поверни телефон горизонтально</div>
     <div class="sheet v" id="settings" aria-hidden="true"></div>
     <div class="fps v" id="fps"></div>
   </div>

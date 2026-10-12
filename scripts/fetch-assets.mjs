@@ -18,6 +18,7 @@ const MEDIAPIPE = '0.10.35';
 const INTER = '5.3.0';
 const JBMONO = '5.3.0';
 const ARCHIVO = '5.3.0';
+const PEERJS = '1.5.5';
 
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
@@ -61,6 +62,14 @@ const PACKAGES = [
     {
       'package/files/jetbrains-mono-latin-500-normal.woff2': 'fonts/jetbrains-mono-latin-500-normal.woff2',
       'package/LICENSE': 'fonts/LICENSE-JetBrainsMono.txt',
+    },
+  ],
+  [
+    // Remote duel by link only (js/remote.js): WebRTC connection set-up through the PeerJS server.
+    `https://registry.npmjs.org/peerjs/-/peerjs-${PEERJS}.tgz`,
+    {
+      'package/dist/peerjs.min.js': 'vendor/peerjs/peerjs.min.js',
+      'package/LICENSE': 'vendor/peerjs/LICENSE.txt',
     },
   ],
 ];

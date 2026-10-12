@@ -1,5 +1,6 @@
 // Camera access. Frames go straight from the <video> element to the detector and
-// the screen; nothing is recorded, encoded or sent anywhere.
+// the screen; nothing is recorded or stored. Nothing is sent anywhere either, except in the
+// remote duel by link (remote.js), where the picture goes to the friend's browser.
 
 export class CameraError extends Error {
   constructor(kind, cause) {
@@ -27,7 +28,8 @@ function kindOf(err) {
   }
 }
 
-export function createCamera({ video, bus }) {
+// size: {w, h} to ask for less than 1080p (the remote duel sends the picture over the network).
+export function createCamera({ video, bus, size }) {
   let stream = null;
   let info = null;
 
@@ -44,7 +46,7 @@ export function createCamera({ video, bus }) {
     if (!navigator.mediaDevices?.getUserMedia) throw new CameraError('unsupported');
 
     // 1080p gives the digital zoom room to work; the detector only ever sees ~640×360.
-    const base = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
+    const base = { width: { ideal: size?.w || 1920 }, height: { ideal: size?.h || 1080 }, frameRate: { ideal: 30 } };
     const attempts = deviceId ? [{ ...base, deviceId: { exact: deviceId } }, base] : [base];
 
     let lastError = null;
