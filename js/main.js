@@ -16,10 +16,11 @@ import { createAura } from './aura.js';
 import { createCameo } from './cameo.js';
 import { createLook } from './look.js';
 import { createRemote, remoteFromUrl } from './remote.js';
+import { deliverReply } from './direct.js';
 import { FACE_OVAL, IDX } from './face.js';
 import { el, onTap } from './util.js';
 
-export const VERSION = '1.11.1';
+export const VERSION = '1.12.0';
 
 const MESSAGES = {
   insecure: [
@@ -53,7 +54,9 @@ const canvas = document.getElementById('overlay');
 const screenCanvas = document.getElementById('picture');
 // Remote duel by link (?host / ?join=…): the camera plays into a hidden element and the main
 // video shows the picture glued from both players' cameras (remote.js).
-const remoteUrl = remoteFromUrl();
+const linkPage = remoteFromUrl();
+const isReply = linkPage?.role === 'reply'; // the friend's reply link, opened by the host: no game here
+const remoteUrl = isReply ? null : linkPage;
 const camVideo = remoteUrl ? el('video', { class: 'src-video', muted: true, playsinline: true, autoplay: true }) : video;
 if (remoteUrl) root.append(camVideo);
 
@@ -417,4 +420,5 @@ window.addEventListener('resize', () => {
 if (new URLSearchParams(location.search).has('debug')) {
   window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, aura, cameo, look, get tracker() { return tracker; } };
 }
-boot();
+if (isReply) deliverReply({ ui, bus, root });
+else boot();
