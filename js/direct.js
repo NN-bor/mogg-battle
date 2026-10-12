@@ -7,7 +7,11 @@ import { el } from './util.js';
 // a STUN lookup of each one's public address, and a relay only if one is reachable).
 
 export const CHANNEL = 'mog-direct'; // the reply tab hands the answer to the game tab
-const GATHER_MS = 3500;              // wait this long for network paths, then use what we have
+// Network paths go into the link all at once, so wait for them: until gathering is complete,
+// or a moment after the first relay path (relays over TCP/TLS on a phone take a few seconds,
+// and without one a strict NAT can't be crossed), but never longer than GATHER_MS.
+const GATHER_MS = 9000;
+const AFTER_RELAY_MS = 1200;
 
 const b64u = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
@@ -34,13 +38,17 @@ export function codeFrom(text) {
 // All network paths go into the link at once (no server to trickle them through later).
 export function gathered(pc) {
   return new Promise((resolve) => {
-    const done = () => resolve(pc.localDescription);
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      resolve(pc.localDescription);
+    };
     if (pc.iceGatheringState === 'complete') return done();
-    const timer = setTimeout(done, GATHER_MS);
-    pc.addEventListener('icegatheringstatechange', () => {
-      if (pc.iceGatheringState !== 'complete') return;
-      clearTimeout(timer);
-      done();
+    setTimeout(done, GATHER_MS);
+    pc.addEventListener('icegatheringstatechange', () => pc.iceGatheringState === 'complete' && done());
+    pc.addEventListener('icecandidate', (e) => {
+      if (/ typ relay /.test(e.candidate?.candidate || '')) setTimeout(done, AFTER_RELAY_MS);
     });
   });
 }

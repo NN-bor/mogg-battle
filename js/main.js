@@ -21,7 +21,7 @@ import { runNetTest } from './nettest.js';
 import { FACE_OVAL, IDX } from './face.js';
 import { el, onTap } from './util.js';
 
-export const VERSION = '1.12.1';
+export const VERSION = '1.13.0';
 
 const MESSAGES = {
   insecure: [

@@ -1,5 +1,6 @@
 import { el, onTap } from './util.js';
 import { CHANNEL, adapt, codeFrom, gathered, pack, preferVP8, unpack } from './direct.js';
+import { OWN_TURN } from './turn-config.js';
 
 // Remote duel by link: two people, two devices, one fight. Opt-in: the app touches the
 // network only when it is opened with ?host or ?join=<room>. The panel's normal mode stays
@@ -29,17 +30,43 @@ const JOIN_TIMEOUT = 15000; // per attempt
 const ATTEMPTS = 2;         // the guest tries this many times before giving up
 const GONE_MS = 10000;      // link silent this long → the friend is gone (WebRTC itself takes ~30 s to give up)
 // Ways through the network. STUN finds the direct path; when both sides sit behind strict
-// NATs (mobile internet, school Wi-Fi) only a relay (TURN) gets through, and TURN over TCP
-// 443 passes almost any firewall. Free public relays, so several of them.
-export const ICE = [
-  { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478', 'stun:stun.sipnet.ru:3478'] },
-  { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+// NATs (mobile internet, a VPN) only a relay (TURN) gets through, and TURN over TCP or TLS
+// on 443 passes almost any firewall. Free public relays first, several of them; where they
+// are blocked (Russia) only an own relay helps (turn-config.js, ?turn=).
+const FREE_ICE = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478', 'stun:stun.sipnet.ru:3478', 'stun:freestun.net:3478'] },
+  { urls: ['turn:eu-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
   {
-    urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
+    urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443?transport=tcp', 'turns:openrelay.metered.ca:443?transport=tcp'],
     username: 'openrelayproject',
     credential: 'openrelayproject',
   },
+  { urls: ['turn:freestun.net:3478', 'turns:freestun.net:5350'], username: 'free', credential: 'free' },
 ];
+
+// "user:password@host[:port]" → STUN and TURN on that server (UDP and TCP, plus TCP 443,
+// which tools/turn-setup.sh forwards to the relay).
+export function ownTurn() {
+  const spec = new URLSearchParams(location.search).get('turn') || OWN_TURN;
+  const m = /^([^:@]+):([^@]+)@([^:/]+)(?::(\d+))?$/.exec(spec || '');
+  if (!m) return null;
+  const [, username, credential, host, port = '3478'] = m;
+  return {
+    spec,
+    servers: [
+      { urls: [`stun:${host}:${port}`] },
+      { urls: [`turn:${host}:${port}`, `turn:${host}:${port}?transport=tcp`, `turn:${host}:443?transport=tcp`], username, credential },
+    ],
+  };
+}
+
+// The own relay first: it is the one that works where the free ones don't.
+export const iceServers = () => [...(ownTurn()?.servers || []), ...FREE_ICE];
+// Carried along in every link this device hands out, so the friend uses the same relay.
+const turnQuery = () => {
+  const t = new URLSearchParams(location.search).get('turn');
+  return t ? `&turn=${encodeURIComponent(t)}` : '';
+};
 
 const NO_SERVER = 'Не заходит? Пусть друг нажмёт у себя «Не заходит?» и пришлёт новую ссылку: она работает без сервера.';
 const NO_VPN = 'Если кто-то из вас с VPN, выключите VPN у обоих: внутри одной страны напрямую соединяется лучше.';
@@ -84,7 +111,7 @@ function loadPeer() {
 
 // ?peer=host:port points at a local PeerJS server (tests); default is the public one.
 // ?relay forces the relay path (to check that TURN gets through).
-const rtcConfig = () => ({ iceServers: ICE, ...(new URLSearchParams(location.search).has('relay') && { iceTransportPolicy: 'relay' }) });
+const rtcConfig = () => ({ iceServers: iceServers(), ...(new URLSearchParams(location.search).has('relay') && { iceTransportPolicy: 'relay' }) });
 function peerOptions() {
   const q = new URLSearchParams(location.search);
   const config = rtcConfig();
@@ -118,9 +145,9 @@ export function createRemote({ role, room, direct = false, bus, root, ui, video,
   const base = `${location.origin}${location.pathname}`;
   if (host && !room && !direct) {
     room = newRoom();
-    history.replaceState(null, '', `${location.pathname}?host=${room}${location.hash}`); // a reload keeps the link
+    history.replaceState(null, '', `${location.pathname}?host=${room}${turnQuery()}${location.hash}`); // a reload keeps the link
   }
-  let link = direct ? '' : `${base}?join=${room}`; // what the strip's button sends
+  let link = direct ? '' : `${base}?join=${room}${turnQuery()}`; // what the strip's button sends
   root.dataset.remote = role;
 
   const peerVideo = el('video', { class: 'src-video', muted: true, playsinline: true, autoplay: true });
@@ -281,7 +308,7 @@ export function createRemote({ role, room, direct = false, bus, root, ui, video,
     await pc.setLocalDescription(await pc.createOffer());
     const desc = await gathered(pc);
     if (pending !== pc) return;
-    link = `${base}?pair#${await pack(desc)}`;
+    link = `${base}?pair${turnQuery()}#${await pack(desc)}`;
     setInvite('ready');
   }
 
@@ -526,7 +553,7 @@ export function createRemote({ role, room, direct = false, bus, root, ui, video,
     }
     if (host && !direct) {
       const other = el('button', { class: 'btn small secondary', type: 'button', text: 'Не заходит?' });
-      onTap(other, () => location.assign(`${location.pathname}?direct`));
+      onTap(other, () => location.assign(`${location.pathname}?direct${turnQuery()}`));
       buttons.push(other);
     }
     if (host) {
