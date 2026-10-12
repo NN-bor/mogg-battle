@@ -606,7 +606,8 @@ button:focus { outline: none; }
   white-space: pre-line;
 }
 .screen-actions { display: flex; gap: 2vh; margin-top: 3vh; }
-.screen[data-kind='loading'] .screen-actions { display: none; }
+.screen[data-kind='loading'] .screen-actions,
+.screen[data-kind='done'] .screen-actions { display: none; }
 .screen[data-kind='loading'] .screen-title { animation: breathe 1.6s var(--ease) infinite alternate; }
 @keyframes breathe { from { opacity: 0.35; } to { opacity: 1; } }
 

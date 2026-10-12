@@ -1,4 +1,5 @@
 import { el, onTap } from './util.js';
+import { CHANNEL, adapt, codeFrom, gathered, pack, preferVP8, unpack } from './direct.js';
 
 // Remote duel by link: two people, two devices, one fight. Opt-in: the app touches the
 // network only when it is opened with ?host or ?join=<room>. The panel's normal mode stays
@@ -11,6 +12,10 @@ import { el, onTap } from './util.js';
 // it to the usual pipeline, so the mask, the aura, the gags and the freeze-frame all work
 // unchanged. The host runs the round and sends its events to the guest, so both screens
 // show the same numbers and the same winner. The host is always on the left.
+//
+// Where the PeerJS server or its relays are blocked (Russia without a VPN), "Не заходит?"
+// switches to the serverless mode (?direct, direct.js): the offer and the answer travel as
+// two links through the messenger.
 
 const PREFIX = 'mogbattle-';
 const W = 1280, H = 720; // the glued picture; each player gets one half
@@ -27,7 +32,7 @@ const GONE_MS = 10000;      // link silent this long → the friend is gone (Web
 // NATs (mobile internet, school Wi-Fi) only a relay (TURN) gets through, and TURN over TCP
 // 443 passes almost any firewall. Free public relays, so several of them.
 const ICE = [
-  { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478', 'stun:stun.sipnet.ru:3478'] },
   { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
   {
     urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
@@ -36,16 +41,24 @@ const ICE = [
   },
 ];
 
+const NO_SERVER = 'Не заходит? Пусть друг нажмёт у себя «Не заходит?» и пришлёт новую ссылку: она работает без сервера.';
+const NO_VPN = 'Если кто-то из вас с VPN, выключите VPN у обоих: внутри одной страны напрямую соединяется лучше.';
 const MESSAGES = {
-  notfound: ['Игра не найдена', 'Ссылка устарела, или друг закрыл вкладку.\nПопроси новую ссылку.'],
+  notfound: ['Игра не найдена', `Ссылка устарела, или друг закрыл вкладку.\n${NO_SERVER}`],
   busy: ['Тут уже играют', 'К другу подключился кто-то другой.\nПопроси новую ссылку.'],
-  timeout: ['Не получилось соединиться', 'Сеть не пропускает видео между вами.\nПусть кто-то один переключится на другую сеть (мобильный интернет или домашний Wi-Fi) и нажмёт «Повторить».'],
+  timeout: ['Не получилось соединиться', `Сеть не пропускает видео между вами.\n${NO_SERVER}`],
   lost: ['Связь с другом пропала', 'Нажми «Повторить», чтобы подключиться снова.'],
-  network: ['Нет связи с сервером', 'Проверь интернет и нажми «Повторить».'],
+  network: ['Нет связи с сервером', `Сервер для знакомства браузеров недоступен.\n${NO_SERVER}`],
+  badlink: ['Ссылка сломалась', 'Похоже, мессенджер её обрезал. Попроси друга скопировать ссылку целиком.'],
+  directTimeout: ['Не получилось соединиться', `${NO_VPN}\nПотом попроси у друга новую ссылку.`],
+  directLost: ['Связь с другом пропала', 'Попроси у друга новую ссылку.'],
 };
 
 export function remoteFromUrl() {
   const q = new URLSearchParams(location.search);
+  if (q.has('reply')) return { role: 'reply' };
+  if (q.has('pair')) return { role: 'guest', direct: true };
+  if (q.has('direct')) return { role: 'host', direct: true };
   if (q.has('join')) return { role: 'guest', room: clean(q.get('join')) };
   if (q.has('host')) return { role: 'host', room: clean(q.get('host')) };
   return null;
@@ -71,9 +84,10 @@ function loadPeer() {
 
 // ?peer=host:port points at a local PeerJS server (tests); default is the public one.
 // ?relay forces the relay path (to check that TURN gets through).
+const rtcConfig = () => ({ iceServers: ICE, ...(new URLSearchParams(location.search).has('relay') && { iceTransportPolicy: 'relay' }) });
 function peerOptions() {
   const q = new URLSearchParams(location.search);
-  const config = { iceServers: ICE, ...(q.has('relay') && { iceTransportPolicy: 'relay' }) };
+  const config = rtcConfig();
   const p = q.get('peer');
   if (!p) return { config };
   const [host, port] = p.split(':');
@@ -97,15 +111,16 @@ async function paths(pc) {
 
 // camVideo: hidden element the local camera plays into. video: the main element, which
 // gets the glued picture.
-export function createRemote({ role, room, bus, root, ui, video, camVideo, settings }) {
+export function createRemote({ role, room, direct = false, bus, root, ui, video, camVideo, settings }) {
   const host = role === 'host';
   const me = host ? 'L' : 'R';
   const friend = host ? 'R' : 'L';
-  if (host && !room) {
+  const base = `${location.origin}${location.pathname}`;
+  if (host && !room && !direct) {
     room = newRoom();
     history.replaceState(null, '', `${location.pathname}?host=${room}${location.hash}`); // a reload keeps the link
   }
-  const link = `${location.origin}${location.pathname}?join=${room}`;
+  let link = direct ? '' : `${base}?join=${room}`; // what the strip's button sends
   root.dataset.remote = role;
 
   const peerVideo = el('video', { class: 'src-video', muted: true, playsinline: true, autoplay: true });
@@ -168,7 +183,7 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
     }
     // A new camera mid-game: swap the track in the running call.
     const track = camVideo.srcObject?.getVideoTracks()[0];
-    const sender = call?.peerConnection?.getSenders().find((s) => s.track?.kind === 'video');
+    const sender = (call || conn)?.peerConnection?.getSenders().find((s) => s.track?.kind === 'video');
     if (track && sender && sender.track !== track) sender.replaceTrack(track).catch(() => {});
     connect();
   }
@@ -178,7 +193,13 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
     if (conn?.open) conn.send(msg);
   }
 
+  let began = false;
   async function connect() {
+    if (direct) {
+      if (began) return;
+      began = true;
+      return host ? offerDirect() : joinDirect();
+    }
     if (peer || failed) return;
     let Peer;
     try {
@@ -236,6 +257,86 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
     }
   }
 
+  // ───── serverless mode (direct.js) ─────
+  let pending = null; // host: the connection waiting for the friend's answer
+
+  function showPeer(s) {
+    peerVideo.srcObject = s;
+    peerVideo.play().catch(() => {});
+  }
+
+  function addCamera(pc) {
+    const s = camVideo.srcObject;
+    for (const t of s?.getTracks() || []) pc.addTrack(t, s);
+  }
+
+  async function offerDirect() {
+    setInvite('pending');
+    const pc = new RTCPeerConnection(rtcConfig());
+    pc.ontrack = (e) => showPeer(e.streams[0] || new MediaStream([e.track]));
+    addCamera(pc);
+    preferVP8(pc);
+    useConn(adapt(pc, pc.createDataChannel('mog', { ordered: true })));
+    pending = pc;
+    await pc.setLocalDescription(await pc.createOffer());
+    const desc = await gathered(pc);
+    if (pending !== pc) return;
+    link = `${base}?pair#${await pack(desc)}`;
+    setInvite('ready');
+  }
+
+  // Host: the friend's reply link (opened in another tab, or pasted).
+  async function answerDirect(text) {
+    const pc = pending;
+    const code = codeFrom(text);
+    if (!pc || !code) return false;
+    try {
+      const desc = await unpack(code);
+      if (desc.type !== 'answer') throw new Error('not an answer');
+      await pc.setRemoteDescription(desc);
+    } catch {
+      bus.emit('notice', { text: 'Это не ответ друга. Пусть пришлёт ответную ссылку целиком', ms: 4000 });
+      return false;
+    }
+    pending = null;
+    const c = conn;
+    setInvite('joining');
+    bus.emit('notice', { text: 'Друг подключается…', ms: 0 });
+    setTimeout(() => c === conn && !c.wasOpen && notThrough(c), JOIN_TIMEOUT);
+    return true;
+  }
+
+  let waiting = ['Подключаемся к другу', '']; // the guest's full screen until the game shows
+  async function joinDirect() {
+    let offer;
+    try {
+      offer = await unpack(codeFrom(location.hash));
+      if (offer.type !== 'offer') throw new Error('not an offer');
+    } catch {
+      return fail('badlink');
+    }
+    const pc = new RTCPeerConnection(rtcConfig());
+    pc.ontrack = (e) => showPeer(e.streams[0] || new MediaStream([e.track]));
+    const shell = { peerConnection: pc, close: () => pc.close() };
+    conn = shell; // until the host's channel arrives
+    pc.ondatachannel = (e) => {
+      const c = adapt(pc, e.channel);
+      useConn(c);
+      if (e.channel.readyState === 'open') c.emit('open');
+    };
+    await pc.setRemoteDescription(offer);
+    addCamera(pc);
+    preferVP8(pc);
+    await pc.setLocalDescription(await pc.createAnswer());
+    const desc = await gathered(pc);
+    link = `${base}?reply#${await pack(desc)}`;
+    waiting = ['Отправь ответ другу', 'Кнопка сверху. Друг откроет ссылку — и вы в игре.'];
+    if (started && !failed) ui.screen('loading', ...waiting);
+    setInvite('reply');
+    // The host needs time to get the reply through the messenger.
+    joinTimer = setTimeout(() => !connected && notThrough(conn || shell), 5 * 60 * 1000);
+  }
+
   let attempt = 0;
   let joinTimer = 0;
   function join() {
@@ -258,7 +359,12 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
     const info = await paths(c.peerConnection);
     console.warn('[remote] no path', info);
     forget();
-    if (host) return bus.emit('notice', { text: 'С другом не соединилось: сеть не пропускает', ms: 4000 });
+    if (host) {
+      bus.emit('notice', { text: direct ? 'С другом не соединилось. Выключите VPN и отправь новую ссылку' : 'С другом не соединилось: сеть не пропускает', ms: 6000 });
+      if (direct) offerDirect();
+      return;
+    }
+    if (direct) return fail('directTimeout', info);
     if (attempt < ATTEMPTS && !failed) return setTimeout(join, 800);
     fail('timeout', info);
   }
@@ -279,7 +385,9 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
     conn = c;
     c.on('open', () => {
       connected = true;
+      clearTimeout(joinTimer);
       watch(c);
+      if (!host) setInvite('playing');
       if (host) {
         for (const name of STICKY) if (last.has(name)) send({ t: 'ev', name, data: last.get(name) });
         setInvite('playing');
@@ -320,9 +428,11 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
   function dropped() {
     forget();
     if (host) {
-      setInvite('ready');
       bus.emit('notice', { text: 'Друг отключился' });
-    } else if (!failed) {
+      if (direct) offerDirect(); // a used offer can't take a second guest
+      else setInvite('ready');
+    } else if (direct) fail('directLost');
+    else if (!failed) {
       // A hiccup on the friend's network: reconnect on our own before giving up.
       bus.emit('notice', { text: 'Связь прервалась, переподключаемся…' });
       attempt = 0;
@@ -340,7 +450,7 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
     if (msg.t === 'busy') return fail('busy');
     if (msg.t === 'bye') {
       forget();
-      return fail('lost');
+      return fail(direct ? 'directLost' : 'lost');
     }
     if (msg.t !== 'ev' || !SYNC.includes(msg.name)) return;
     let data = msg.data;
@@ -387,25 +497,51 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
 
   // Idle headline: who is missing, from this screen's point of view.
   function attract(slots) {
-    if (host && !connected) return { title: 'Позови друга', sub: 'Отправь ему ссылку сверху' };
+    if (host && !connected) return { title: 'Позови друга', sub: direct ? 'Он пришлёт ответную ссылку — открой её в этом браузере' : 'Отправь ему ссылку сверху' };
     if (!slots[me].present) return { title: 'Встань в кадр', sub: slots[friend].present ? 'Друг уже на месте' : 'Ты — в своей половине экрана' };
     if (!slots[friend].present) return { title: 'Ждём друга', sub: 'Он на связи, но не в кадре' };
     return null;
   }
 
-  // ───── host: the invite strip ─────
+  // ───── the link strip at the top: the host's invite, the direct guest's reply ─────
   let setInvite = () => {};
-  if (host) {
+  if (host || direct) {
     const share = !!navigator.share && matchMedia('(pointer: coarse)').matches;
-    const url = el('b', { class: 'invite-url', text: link.replace(/^https?:\/\//, '') });
-    const label = el('span', { class: 'invite-label', text: 'Ссылка для друга' });
+    const url = el('b', { class: 'invite-url' });
+    const label = el('span', { class: 'invite-label' });
     const copy = el('button', { class: 'btn small primary', type: 'button', text: share ? 'Отправить' : 'Скопировать' });
-    const quit = el('button', { class: 'btn small secondary', type: 'button', text: 'Выйти' });
-    const box = el('div', { class: 'invite v rise' }, [el('div', { class: 'invite-text' }, [label, url]), copy, quit]);
-    root.querySelector('#cameo').before(box); // under the full screens and the settings
+    const buttons = [copy];
+    if (host && direct) {
+      const paste = el('button', { class: 'btn small secondary', type: 'button', text: 'Вставить ответ' });
+      onTap(paste, async () => {
+        let text = '';
+        try {
+          text = await navigator.clipboard.readText();
+        } catch {}
+        if (/[?&]reply/.test(text) && (await answerDirect(text))) return;
+        const typed = window.prompt('Вставь ответную ссылку друга');
+        if (typed) answerDirect(typed);
+      });
+      buttons.push(paste);
+    }
+    if (host && !direct) {
+      const other = el('button', { class: 'btn small secondary', type: 'button', text: 'Не заходит?' });
+      onTap(other, () => location.assign(`${location.pathname}?direct`));
+      buttons.push(other);
+    }
+    if (host) {
+      const quit = el('button', { class: 'btn small secondary', type: 'button', text: 'Выйти' });
+      onTap(quit, () => location.assign(location.pathname));
+      buttons.push(quit);
+    }
+    const box = el('div', { class: 'invite v rise' }, [el('div', { class: 'invite-text' }, [label, url]), ...buttons]);
+    // The host's strip sits under the full screens and the settings; the guest's reply above them.
+    if (host) root.querySelector('#cameo').before(box);
+    else root.append(box);
     onTap(copy, async () => {
+      if (!link) return;
       try {
-        if (share) await navigator.share({ title: 'mog battle', text: 'Кто кого? Заходи:', url: link });
+        if (share) await navigator.share(host ? { title: 'mog battle', text: 'Кто кого? Заходи:', url: link } : { title: 'mog battle', text: 'Мой ответ, открой:', url: link });
         else {
           await navigator.clipboard.writeText(link);
           copy.textContent = 'Скопировано';
@@ -413,13 +549,30 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
         }
       } catch {}
     });
-    onTap(quit, () => location.assign(location.pathname));
+    const LABEL = {
+      pending: host ? 'Готовлю ссылку…' : 'Готовлю ответ…',
+      ready: direct ? 'Шаг 1 · ссылка для друга' : 'Ссылка для друга',
+      joining: 'Соединяемся…',
+      offline: 'Нет связи с сервером, пробую ещё раз…',
+      reply: 'Ответ для друга',
+    };
     setInvite = (s) => {
       box.classList.toggle('on', s !== 'playing');
       box.dataset.status = s;
-      label.textContent = s === 'offline' ? 'Нет связи с сервером, пробую ещё раз…' : 'Ссылка для друга';
+      label.textContent = LABEL[s] || '';
+      const shown = link.replace(/^https?:\/\//, '');
+      url.textContent = shown.length > 48 ? `${shown.slice(0, 46)}…` : shown || '…';
+      box.dataset.link = link; // tests read the full link here
     };
     setInvite('pending');
+  }
+
+  // Host, serverless: the reply link opened in another tab of this browser lands here.
+  if (host && direct) {
+    const ch = new BroadcastChannel(CHANNEL);
+    ch.onmessage = async (e) => {
+      if (e.data?.answer && (await answerDirect(e.data.answer))) ch.postMessage({ ok: true });
+    };
   }
 
   return {
@@ -431,7 +584,7 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
       start() {
         started = true;
         if (failed) return;
-        if (!last.has('state')) ui.screen('loading', 'Подключаемся к другу');
+        if (!last.has('state')) ui.screen('loading', ...waiting);
         for (const name of STICKY) if (last.has(name)) bus.emit(name, last.get(name));
       },
       stop() {},
