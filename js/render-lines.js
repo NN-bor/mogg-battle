@@ -35,6 +35,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
   let resultAt = 0;
   let scanStart = 0;
   let frozen = null; // result freeze-frame: the loser's eye corners as they were on the hit
+  const jolt = { L: -1e9, R: -1e9, dir: { L: 1, R: -1 } }; // hammer gag: the face lines take the hit
   let last = performance.now();
 
   bus.on('state', ({ to }) => {
@@ -44,6 +45,14 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     if (to === 'idle' || to === 'ready') meta = null;
   });
   bus.on('round:meta', (m) => (meta = m));
+  bus.on('gag:hit', ({ side }) => (jolt[side] = performance.now()));
+  // A damped wobble away from the hammer, ~0.3 s.
+  function joltOf(side, now) {
+    const t = now - jolt[side];
+    if (t < 0 || t > 320) return null;
+    const a = view.vh * 1.4 * Math.exp(-t / 90), w = (t / 1000) * Math.PI * 2 * 14;
+    return [jolt.dir[side] * a * Math.sin(w), a * 0.45 * Math.sin(w * 1.3 + 1)];
+  }
   bus.on('round:scan', ({ start }) => (scanStart = start));
   bus.on('round:result', (r) => {
     result = r;
@@ -358,9 +367,15 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
       const a = state === 'scan' ? progress(now, scanStart, 420) : lerp(1, 0.55, inState);
       for (const s of faces) {
         const vis = smooth[s].vis;
+        const j = joltOf(s, now);
+        if (j) {
+          ctx.save();
+          ctx.translate(j[0], j[1]);
+        }
         drawBrackets(smooth[s], 1, meta?.key === 'AURA' ? ACCENT : WHITE, 0.9 * vis);
         drawFaceLines(smooth[s], a * vis);
         if (state === 'scan') drawScanLine(smooth[s], now, vis);
+        if (j) ctx.restore();
       }
     }
     // Diagnostics (with the FPS overlay on): the detector tiles, one per player.

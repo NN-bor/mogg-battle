@@ -14,6 +14,7 @@ const EVENTS = {
   locked: { value: 1000, tag: 'LOCKED IN', metric: 'AURA' },
   hunter: { value: 500, tag: 'HUNTER EYES', metric: 'STARE' },
   brows: { value: 300, tag: 'BROWS UP', metric: 'BROW' },
+  bonk: { value: -500, tag: 'BONESMASHED', metric: null }, // the hammer gag (cameo.js): it never pays
 };
 
 // Edge triggers with hysteresis: fire above `on`, re-arm below `off`.
@@ -198,6 +199,7 @@ export function createAura({ layer, bus, players, getBox }) {
     }
   });
   bus.on('round:meta', (m) => (meta = m));
+  bus.on('gag:hit', ({ side, first }) => first && queue(side, 'bonk', performance.now()));
   bus.on('round:lock', ({ side }) => (locked[side] = true));
   bus.on('frame', ({ now }) => {
     for (const side of SIDES) place(side); // labels follow the head, frame by frame

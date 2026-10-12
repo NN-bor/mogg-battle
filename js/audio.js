@@ -71,6 +71,11 @@ export function createAudio({ bus, settings }) {
       tone({ freq: 170, to: 85, gain: 0.14, attack: 0.003, decay: 0.14 });
       noise({ gain: 0.04, decay: 0.035, cutoff: 900 });
     },
+    // Hammer gag: a cartoon wooden bonk.
+    bonk: (first) => {
+      tone({ freq: first ? 640 : 560, to: 170, gain: first ? 0.22 : 0.15, attack: 0.002, decay: 0.12 });
+      noise({ gain: 0.07, decay: 0.03, cutoff: 2600 });
+    },
     thud: () => {
       tone({ freq: 120, to: 42, gain: 0.5, attack: 0.005, decay: 0.45 });
       noise({ gain: 0.12, decay: 0.09, cutoff: 320 });
@@ -85,7 +90,8 @@ export function createAudio({ bus, settings }) {
   bus.on('round:scan', () => play('go'));
   bus.on('round:lock', ({ isLast }) => play('tick', isLast));
   bus.on('round:result', () => play('thud'));
-  bus.on('aura', ({ value }) => play(value > 0 ? 'auraUp' : 'auraDown', Math.abs(value) >= 1000));
+  bus.on('aura', ({ value, tag }) => tag !== 'BONESMASHED' && play(value > 0 ? 'auraUp' : 'auraDown', Math.abs(value) >= 1000));
+  bus.on('gag:hit', ({ first }) => play('bonk', first));
 
   return { unlock, play };
 }

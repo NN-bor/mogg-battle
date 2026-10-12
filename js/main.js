@@ -15,9 +15,9 @@ import { createStill } from './still.js';
 import { createAura } from './aura.js';
 import { createCameo } from './cameo.js';
 import { createLook } from './look.js';
-import { FACE_OVAL } from './face.js';
+import { FACE_OVAL, IDX } from './face.js';
 
-export const VERSION = '1.9.0';
+export const VERSION = '1.10.0';
 
 const MESSAGES = {
   insecure: [
@@ -65,7 +65,7 @@ const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.
 const look = createLook({ view, bus, settings, screen: screenCanvas });
 const still = createStill({ canvas: document.getElementById('still'), source: screenCanvas, view, lines, bus, look });
 const aura = createAura({ layer: document.getElementById('aura'), bus, players, getBox: faceBox });
-const cameo = createCameo({ layer: document.getElementById('cameo'), bus, settings });
+const cameo = createCameo({ layer: document.getElementById('cameo'), bus, settings, getJaw: jawPoint });
 const record = createRecord();
 const mode = createDuelMode({ bus, settings, slots: assigner.slots, players, record });
 
@@ -116,6 +116,22 @@ function faceBox(side) {
     y1 = Math.max(y1, y);
   }
   return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+}
+
+// The player's jaw corner on the screen-edge side (CSS px), a bit toward the chin: where the
+// hammer gag lands.
+function jawPoint(side) {
+  const box = faceBox(side);
+  if (!box) return null;
+  const st = stab[side];
+  const k = view.sw / view.cw;
+  const at = (i) => {
+    const [nx, ny] = st.point(i);
+    return [view.x(nx) * k, view.y(ny) * k];
+  };
+  const a = at(IDX.rGonion), b = at(IDX.lGonion), chin = at(IDX.chin);
+  const g = side === 'L' ? (a[0] < b[0] ? a : b) : a[0] > b[0] ? a : b;
+  return { x: g[0] * 0.75 + chin[0] * 0.25, y: g[1] * 0.75 + chin[1] * 0.25, faceH: box.h };
 }
 
 // ───── boot ─────
