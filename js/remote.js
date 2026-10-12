@@ -20,13 +20,26 @@ const SYNC = ['state', 'notice', 'round:meta', 'round:countdown', 'round:scan', 
 const STICKY = ['series', 'streak', 'round:meta', 'state']; // replayed to a guest who joins late
 const GAME = new Set(['idle', 'ready', 'meta', 'countdown', 'scan', 'reveal', 'result']);
 const UI = ['ui:start', 'ui:rematch', 'ui:new']; // guest → host: the guest's taps
-const JOIN_TIMEOUT = 20000;
-const GONE_MS = 5000; // link silent this long → the friend is gone (WebRTC itself takes ~30 s to give up)
+const JOIN_TIMEOUT = 15000; // per attempt
+const ATTEMPTS = 2;         // the guest tries this many times before giving up
+const GONE_MS = 10000;      // link silent this long → the friend is gone (WebRTC itself takes ~30 s to give up)
+// Ways through the network. STUN finds the direct path; when both sides sit behind strict
+// NATs (mobile internet, school Wi-Fi) only a relay (TURN) gets through, and TURN over TCP
+// 443 passes almost any firewall. Free public relays, so several of them.
+const ICE = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+  { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+  {
+    urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+];
 
 const MESSAGES = {
   notfound: ['Игра не найдена', 'Ссылка устарела, или друг закрыл вкладку.\nПопроси новую ссылку.'],
   busy: ['Тут уже играют', 'К другу подключился кто-то другой.\nПопроси новую ссылку.'],
-  timeout: ['Не получилось соединиться', 'Сеть не пропускает видео.\nПопробуйте другую сеть, например мобильный интернет.'],
+  timeout: ['Не получилось соединиться', 'Сеть не пропускает видео между вами.\nПусть кто-то один переключится на другую сеть (мобильный интернет или домашний Wi-Fi) и нажмёт «Повторить».'],
   lost: ['Связь с другом пропала', 'Нажми «Повторить», чтобы подключиться снова.'],
   network: ['Нет связи с сервером', 'Проверь интернет и нажми «Повторить».'],
 };
@@ -57,11 +70,29 @@ function loadPeer() {
 }
 
 // ?peer=host:port points at a local PeerJS server (tests); default is the public one.
+// ?relay forces the relay path (to check that TURN gets through).
 function peerOptions() {
-  const p = new URLSearchParams(location.search).get('peer');
-  if (!p) return {};
+  const q = new URLSearchParams(location.search);
+  const config = { iceServers: ICE, ...(q.has('relay') && { iceTransportPolicy: 'relay' }) };
+  const p = q.get('peer');
+  if (!p) return { config };
   const [host, port] = p.split(':');
-  return { host, port: Number(port) || 9000, path: '/', secure: false };
+  return { host, port: Number(port) || 9000, path: '/', secure: false, config };
+}
+
+// What paths each side found, for the error screen: "host" = local network only,
+// "srflx" = public address (STUN), "relay" = through a relay (TURN).
+async function paths(pc) {
+  if (!pc) return '';
+  const mine = new Set(), theirs = new Set();
+  try {
+    (await pc.getStats()).forEach((r) => {
+      if (r.type === 'local-candidate') mine.add(r.candidateType);
+      if (r.type === 'remote-candidate') theirs.add(r.candidateType);
+    });
+  } catch {}
+  const list = (s) => [...s].join(', ') || 'нет';
+  return `ICE ${pc.iceConnectionState} · у тебя: ${list(mine)} · у друга: ${list(theirs)}`;
 }
 
 // camVideo: hidden element the local camera plays into. video: the main element, which
@@ -182,14 +213,18 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
     });
     if (host) {
       peer.on('connection', (c) => {
-        if (conn) {
+        // The same guest reconnecting replaces its old link; a stranger waits while a game is on.
+        if (conn && c.peer !== conn.peer && conn.open) {
           c.on('open', () => {
             c.send({ t: 'busy' });
             setTimeout(() => c.close(), 500);
           });
           return;
         }
+        if (conn) forget();
+        bus.emit('notice', { text: 'Друг подключается…', ms: 0 });
         useConn(c);
+        setTimeout(() => c === conn && !c.wasOpen && notThrough(c), JOIN_TIMEOUT + 2000);
       });
       peer.on('call', (c) => {
         if (c.peer !== conn?.peer) return c.close();
@@ -201,15 +236,43 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
     }
   }
 
+  let attempt = 0;
+  let joinTimer = 0;
   function join() {
+    attempt++;
+    if (started) ui.screen('loading', attempt > 1 ? `Подключаемся… попытка ${attempt} из ${ATTEMPTS}` : 'Подключаемся к другу');
     const c = peer.connect(PREFIX + room, { reliable: true });
     useConn(c);
-    const timer = setTimeout(() => !connected && fail('timeout'), JOIN_TIMEOUT);
+    clearTimeout(joinTimer);
+    joinTimer = setTimeout(() => c === conn && !connected && notThrough(c), JOIN_TIMEOUT);
     c.on('open', () => {
-      clearTimeout(timer);
+      clearTimeout(joinTimer);
+      attempt = 0;
       call = peer.call(PREFIX + room, camVideo.srcObject);
       useCall(call);
     });
+  }
+
+  // The link never opened: no way through the network. Try again, then say so.
+  async function notThrough(c) {
+    const info = await paths(c.peerConnection);
+    console.warn('[remote] no path', info);
+    forget();
+    if (host) return bus.emit('notice', { text: 'С другом не соединилось: сеть не пропускает', ms: 4000 });
+    if (attempt < ATTEMPTS && !failed) return setTimeout(join, 800);
+    fail('timeout', info);
+  }
+
+  // Drop the current link without any verdict.
+  function forget() {
+    clearInterval(watchTimer);
+    const c = conn;
+    conn = null;
+    connected = false;
+    c?.close();
+    call?.close();
+    call = null;
+    peerVideo.srcObject = null;
   }
 
   function useConn(c) {
@@ -224,8 +287,11 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
       }
     });
     c.on('data', receive);
-    c.on('close', () => c === conn && dropped());
-    c.on('error', () => c === conn && dropped());
+    // Before it ever opened, a closed link means no way through; after, the friend left.
+    const end = () => c === conn && (c.wasOpen ? dropped() : notThrough(c));
+    c.on('open', () => (c.wasOpen = true));
+    c.on('close', end);
+    c.on('error', end);
   }
 
   function useCall(c) {
@@ -252,16 +318,16 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
   }
 
   function dropped() {
-    clearInterval(watchTimer);
-    connected = false;
-    conn = null;
-    call?.close();
-    call = null;
-    peerVideo.srcObject = null;
+    forget();
     if (host) {
       setInvite('ready');
       bus.emit('notice', { text: 'Друг отключился' });
-    } else fail('lost');
+    } else if (!failed) {
+      // A hiccup on the friend's network: reconnect on our own before giving up.
+      bus.emit('notice', { text: 'Связь прервалась, переподключаемся…' });
+      attempt = 0;
+      setTimeout(join, 500);
+    }
   }
 
   function receive(msg) {
@@ -272,7 +338,10 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
       return;
     }
     if (msg.t === 'busy') return fail('busy');
-    if (msg.t === 'bye') return dropped();
+    if (msg.t === 'bye') {
+      forget();
+      return fail('lost');
+    }
     if (msg.t !== 'ev' || !SYNC.includes(msg.name)) return;
     let data = msg.data;
     if (msg.name === 'round:scan') data = { ...data, start: performance.now() }; // the host's clock means nothing here
@@ -280,13 +349,14 @@ export function createRemote({ role, room, bus, root, ui, video, camVideo, setti
     if (started && !failed) bus.emit(msg.name, data);
   }
 
-  function fail(kind) {
+  function fail(kind, details = '') {
     if (host || failed) return;
     failed = true;
+    clearTimeout(joinTimer);
     conn?.close();
     peer?.destroy();
     const [title, body] = MESSAGES[kind] || MESSAGES.lost;
-    ui.screen('error', title, body);
+    ui.screen('error', title, details ? `${body}\n\n${details}` : body);
     bus.emit('state', { to: 'nocamera' });
   }
 

@@ -19,7 +19,7 @@ import { createRemote, remoteFromUrl } from './remote.js';
 import { FACE_OVAL, IDX } from './face.js';
 import { el, onTap } from './util.js';
 
-export const VERSION = '1.11.0';
+export const VERSION = '1.11.1';
 
 const MESSAGES = {
   insecure: [
