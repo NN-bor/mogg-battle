@@ -1,5 +1,5 @@
 import { el } from './util.js';
-import { ICE } from './remote.js';
+import { iceServers, ownTurn } from './remote.js';
 
 // Network check for the remote duel (?nettest): which of the ways two browsers can find
 // each other work on this network. Each STUN server tells whether a direct path is
@@ -42,14 +42,15 @@ async function reachable(url) {
 }
 
 const mask = (ip) => (ip.includes('.') ? ip.split('.').slice(0, 2).join('.') + '.x.x' : ip.split(':').slice(0, 2).join(':') + ':…');
-const short = (url) => url.replace(/^(stun|turn):/, '').replace('?transport=', ' ');
+const short = (url) => url.replace(/^(stun|turns?):/, (m) => (m === 'turns:' ? 'tls ' : '')).replace('?transport=', ' ');
 
 export async function runNetTest({ ui, bus, root }) {
   bus.emit('state', { to: 'boot' }); // shows the full screen
   ui.screen('loading', 'Проверка сети', 'Секунд 10…');
 
-  const stun = ICE[0].urls.map((u) => ({ url: u, server: { urls: u } }));
-  const turn = ICE.slice(1).flatMap((s) => s.urls.map((u) => ({ url: u, server: { urls: u, username: s.username, credential: s.credential } })));
+  const ice = iceServers();
+  const stun = ice.filter((s) => !s.username).flatMap((s) => s.urls.map((u) => ({ url: u, server: { urls: u } })));
+  const turn = ice.filter((s) => s.username).flatMap((s) => s.urls.map((u) => ({ url: u, server: { urls: u, username: s.username, credential: s.credential } })));
   const [stunRes, turnRes, peerjs, pages] = await Promise.all([
     Promise.all(stun.map((s) => probe(s.server, 'srflx'))),
     Promise.all(turn.map((s) => probe(s.server, 'relay'))),
@@ -72,7 +73,7 @@ export async function runNetTest({ ui, bus, root }) {
   const relay = turnRes.some((r) => r.length);
   const verdict = [
     !direct ? 'STUN не отвечает: напрямую из этой сети не соединиться.' : symmetric ? 'NAT симметричный: напрямую не пройти, нужен ретранслятор.' : 'Напрямую из этой сети можно.',
-    relay ? 'Ретранслятор доступен.' : 'Ни один бесплатный ретранслятор недоступен.',
+    relay ? 'Ретранслятор доступен.' : ownTurn() ? 'Свой ретранслятор не отвечает: проверь сервер.' : 'Ни один бесплатный ретранслятор недоступен: нужен свой.',
     peerjs ? 'Обычная ссылка должна работать.' : 'Сервер PeerJS недоступен: только «Не заходит?».',
   ];
   const ua = navigator.userAgent.match(/(YaBrowser|Edg|OPR|Firefox|CriOS|Chrome|Version)\/[\d.]+/)?.[0] || '';
