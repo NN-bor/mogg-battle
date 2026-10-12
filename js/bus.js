@@ -6,6 +6,7 @@
 //   frame            {now, slots, players}       every detector result after assignment
 //   attract          {title, sub}                idle headline: who is missing
 //   aura             {side, value, tag}          an aura popup was shown (sound)
+//   gag:hit          {side, first}               the hammer gag landed on a player's jaw
 //   notice           {text}                      one-line message above the action slot
 //   round:meta       {key, label, mult, hint}   round bonus; the UI shows only the hint
 //   round:countdown  {n}
