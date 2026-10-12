@@ -31,7 +31,7 @@ const GONE_MS = 10000;      // link silent this long → the friend is gone (Web
 // Ways through the network. STUN finds the direct path; when both sides sit behind strict
 // NATs (mobile internet, school Wi-Fi) only a relay (TURN) gets through, and TURN over TCP
 // 443 passes almost any firewall. Free public relays, so several of them.
-const ICE = [
+export const ICE = [
   { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478', 'stun:stun.sipnet.ru:3478'] },
   { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
   {
@@ -46,11 +46,11 @@ const NO_VPN = 'Если кто-то из вас с VPN, выключите VPN 
 const MESSAGES = {
   notfound: ['Игра не найдена', `Ссылка устарела, или друг закрыл вкладку.\n${NO_SERVER}`],
   busy: ['Тут уже играют', 'К другу подключился кто-то другой.\nПопроси новую ссылку.'],
-  timeout: ['Не получилось соединиться', `Сеть не пропускает видео между вами.\n${NO_SERVER}`],
+  timeout: ['Не получилось соединиться', `Сеть не пропускает видео между вами.\n${NO_SERVER}\nЧто проходит в вашей сети, покажет проверка: адрес сайта + ?nettest`],
   lost: ['Связь с другом пропала', 'Нажми «Повторить», чтобы подключиться снова.'],
   network: ['Нет связи с сервером', `Сервер для знакомства браузеров недоступен.\n${NO_SERVER}`],
   badlink: ['Ссылка сломалась', 'Похоже, мессенджер её обрезал. Попроси друга скопировать ссылку целиком.'],
-  directTimeout: ['Не получилось соединиться', `${NO_VPN}\nПотом попроси у друга новую ссылку.`],
+  directTimeout: ['Не получилось соединиться', `${NO_VPN}\nПотом попроси у друга новую ссылку.\nЧто проходит в вашей сети, покажет проверка: адрес сайта + ?nettest`],
   directLost: ['Связь с другом пропала', 'Попроси у друга новую ссылку.'],
 };
 

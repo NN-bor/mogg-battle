@@ -17,10 +17,11 @@ import { createCameo } from './cameo.js';
 import { createLook } from './look.js';
 import { createRemote, remoteFromUrl } from './remote.js';
 import { deliverReply } from './direct.js';
+import { runNetTest } from './nettest.js';
 import { FACE_OVAL, IDX } from './face.js';
 import { el, onTap } from './util.js';
 
-export const VERSION = '1.12.0';
+export const VERSION = '1.12.1';
 
 const MESSAGES = {
   insecure: [
@@ -56,7 +57,8 @@ const screenCanvas = document.getElementById('picture');
 // video shows the picture glued from both players' cameras (remote.js).
 const linkPage = remoteFromUrl();
 const isReply = linkPage?.role === 'reply'; // the friend's reply link, opened by the host: no game here
-const remoteUrl = isReply ? null : linkPage;
+const isNetTest = new URLSearchParams(location.search).has('nettest'); // network check page: no game either
+const remoteUrl = isReply || isNetTest ? null : linkPage;
 const camVideo = remoteUrl ? el('video', { class: 'src-video', muted: true, playsinline: true, autoplay: true }) : video;
 if (remoteUrl) root.append(camVideo);
 
@@ -421,4 +423,5 @@ if (new URLSearchParams(location.search).has('debug')) {
   window.mog = { bus, settings, players, slots: assigner.slots, mode, lines, view, stab, aura, cameo, look, get tracker() { return tracker; } };
 }
 if (isReply) deliverReply({ ui, bus, root });
+else if (isNetTest) runNetTest({ ui, bus, root });
 else boot();
