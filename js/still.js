@@ -100,5 +100,6 @@ export function createStill({ canvas, source, view, lines, bus, look }) {
     if (to !== 'result') release();
   });
 
-  return { draw };
+  // frame(): the frozen picture as it drains to (grey or the poster), for the TikTok card.
+  return { draw, frame: () => (shot ? gray : null) };
 }
