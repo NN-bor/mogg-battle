@@ -18,10 +18,11 @@ import { createLook } from './look.js';
 import { createRemote, remoteFromUrl } from './remote.js';
 import { deliverReply } from './direct.js';
 import { runNetTest } from './nettest.js';
+import { createRoulette, rouletteFromUrl, rouletteOnline } from './roulette.js';
 import { FACE_OVAL, IDX } from './face.js';
 import { el, onTap } from './util.js';
 
-export const VERSION = '1.13.0';
+export const VERSION = '1.14.0';
 
 const MESSAGES = {
   insecure: [
@@ -59,30 +60,36 @@ const linkPage = remoteFromUrl();
 const isReply = linkPage?.role === 'reply'; // the friend's reply link, opened by the host: no game here
 const isNetTest = new URLSearchParams(location.search).has('nettest'); // network check page: no game either
 const remoteUrl = isReply || isNetTest ? null : linkPage;
-const camVideo = remoteUrl ? el('video', { class: 'src-video', muted: true, playsinline: true, autoplay: true }) : video;
-if (remoteUrl) root.append(camVideo);
+// Mask roulette (?roulette): a random stranger, seen only as face points (roulette.js).
+const isRoulette = !linkPage && !isNetTest && rouletteFromUrl();
+const glued = !!remoteUrl || isRoulette; // the main video shows a glued picture (glue.js)
+const camVideo = glued ? el('video', { class: 'src-video', muted: true, playsinline: true, autoplay: true }) : video;
+if (glued) root.append(camVideo);
 
 const bus = createBus();
 const settings = createSettings(bus);
 const ui = createUI({ root, bus });
 const view = createView({ video, canvas, screen: screenCanvas, settings });
-const camera = createCamera({ video: camVideo, bus, size: remoteUrl && { w: 1280, h: 720 } });
+const camera = createCamera({ video: camVideo, bus, size: glued && { w: 1280, h: 720 } });
 const audio = createAudio({ bus, settings });
 const assigner = createAssigner();
 const players = { L: createPlayerMetrics(), R: createPlayerMetrics() };
 // One mask stabilizer per player: filtered head pose + slowly averaged face shape.
 const stab = { L: createStabilizer(), R: createStabilizer() };
 const stabOwner = { L: { epoch: -1, seen: -1e9 }, R: { epoch: -1, seen: -1e9 } };
-const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, stab, getTracker: () => tracker });
+const lines = createLineRenderer({ canvas, view, bus, settings, slots: assigner.slots, stab, getTracker: () => tracker, masked: isRoulette ? new Set(['R']) : null });
 const look = createLook({ view, bus, settings, screen: screenCanvas });
 const still = createStill({ canvas: document.getElementById('still'), source: screenCanvas, view, lines, bus, look });
 const aura = createAura({ layer: document.getElementById('aura'), bus, players, getBox: faceBox });
 const cameo = createCameo({ layer: document.getElementById('cameo'), bus, settings, getJaw: jawPoint });
 const record = createRecord();
 const remote = remoteUrl && createRemote({ ...remoteUrl, bus, root, ui, video, camVideo, settings });
-// The guest's round is run by the host; the guest only follows its events.
+const roulette = isRoulette ? createRoulette({ bus, root, video, camVideo, settings }) : null;
+// The guest's round is run by the host, the roulette's by the server; they only follow events.
 const mode =
-  remote?.role === 'guest'
+  roulette
+    ? roulette.follower
+    : remote?.role === 'guest'
     ? remote.follower
     : createDuelMode({ bus, settings, slots: assigner.slots, players, record, attractFor: remote?.attract });
 
@@ -171,6 +178,7 @@ function ensureTracker() {
 async function startCamera() {
   const info = await camera.start(settings.get('cameraId'));
   await remote?.attach();
+  await roulette?.attach();
   screenCanvas.classList.add('live');
   armVideoFrames();
   return info;
@@ -228,7 +236,8 @@ function detectFrame(now) {
 }
 
 function track(now) {
-  const faces = tracker.detect(video, now);
+  let faces = tracker.detect(video, now);
+  if (faces && roulette) faces = roulette.inject(faces, now); // yours out, the stranger's in
   if (!faces) {
     // Skipped by the detector (slow panel): carry each mask forward to this frame.
     for (const side of SIDES) if (assigner.slots[side].present && stab[side].ready) stab[side].hold(now);
@@ -360,7 +369,7 @@ bus.on('settings', ({ key }) => {
 });
 
 bus.on('ui:retry', () => {
-  if (remote) return location.reload(); // a fresh connection
+  if (remote || roulette) return location.reload(); // a fresh connection
   clearTimeout(reconnectTimer);
   reconnectTimer = 0;
   boot();
@@ -370,8 +379,17 @@ bus.on('ui:settings', () => sheet.open());
 // "Play by link" in idle: only in a browser tab with internet, never in the installed kiosk app.
 const linkButton = document.getElementById('btn-link');
 const kiosk = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
-if (!remote && !kiosk && navigator.onLine) root.dataset.net = '';
+if (!remote && !roulette && !kiosk && navigator.onLine) {
+  root.dataset.net = '';
+  // Served with the roulette server next to it (not on GitHub Pages): offer a random stranger.
+  rouletteOnline().then((n) => {
+    if (n === null) return;
+    root.dataset.roulette = '';
+    document.getElementById('btn-roulette').textContent = n > 0 ? `Случайный соперник · ${n} онлайн` : 'Случайный соперник';
+  });
+}
 onTap(linkButton, () => location.assign(`${location.pathname}?host`));
+onTap(document.getElementById('btn-roulette'), () => location.assign(`${location.pathname}?roulette`));
 // Hidden settings: hold the empty top-left corner for 1.5 s.
 bindLongPress(document.getElementById('hotspot'), 1500, () => sheet.open());
 

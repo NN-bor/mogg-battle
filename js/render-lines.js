@@ -15,12 +15,24 @@ const JAW_L = [454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152];
 // Thirds: contour points level with the forehead top, the glabella, the nose base and the chin.
 const THIRDS = [[109, 338], [21, 251], [132, 361], [148, 377]];
 
+// The roulette opponent's mask (no camera, face points only): features drawn over the dots.
+const MESH = [
+  [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7, 33],
+  [263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249, 263],
+  [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61],
+  [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78],
+  [70, 63, 105, 66, 107],
+  [300, 293, 334, 296, 336],
+  [168, 6, 197, 195, 5, 4, 1, 19, 94, 2],
+];
+
 const EYES = [
   { outer: IDX.rOuter, inner: IDX.rInner },
   { outer: IDX.lOuter, inner: IDX.lInner },
 ];
 
-export function createLineRenderer({ canvas, view, bus, settings, slots, stab, getTracker }) {
+// masked: sides shown as a mask of face points instead of a camera picture (the roulette).
+export function createLineRenderer({ canvas, view, bus, settings, slots, stab, getTracker, masked = null }) {
   const ctx = canvas.getContext('2d');
   const css = getComputedStyle(document.documentElement);
   const token = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
@@ -113,6 +125,19 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     ctx.fill();
   }
   const along = (a, d, k) => [a[0] + d[0] * k, a[1] + d[1] * k];
+
+  // ───── roulette: the opponent as a mask of face points ─────
+  const meshOf = (sm) => Array.from({ length: sm.n }, (_, i) => P(sm, i));
+  function drawMesh(pts, alpha) {
+    if (alpha <= 0.001 || pts.length < 478) return;
+    const r = LW * 0.7;
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.fillStyle = WHITE;
+    for (const p of pts) ctx.fillRect(p[0] - r, p[1] - r, 2 * r, 2 * r);
+    for (const line of MESH) stroke(line.map((i) => pts[i]), WHITE, alpha * 0.85);
+    stroke([...CONTOUR_UPPER, ...JAW_L.slice(1), ...JAW_R.slice(0, -1).reverse()].map((i) => pts[i]), WHITE, alpha * 0.85); // the whole outline
+    for (const i of [468, 473]) dot(pts[i], WHITE, alpha, LW * 2.2);
+  }
 
   // ───── idle guides: two ovals to stand in ─────
   // An empty oval scans for a face. With nobody around, a ghost MOGGED! band stamps across
@@ -333,7 +358,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     frozen = {};
     for (const s of SIDES) {
       const sm = smooth[s];
-      if (sm.has) frozen[s] = { ro: P(sm, IDX.rOuter), lo: P(sm, IDX.lOuter), vis: sm.vis };
+      if (sm.has) frozen[s] = { ro: P(sm, IDX.rOuter), lo: P(sm, IDX.lOuter), vis: sm.vis, mesh: masked?.has(s) ? meshOf(sm) : null };
     }
     // Where to punch in: the loser's eyes; on a draw, between both players.
     const focus = (s) => frozen[s] && mid(frozen[s].ro, frozen[s].lo);
@@ -354,6 +379,17 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
 
     const inState = progress(now, stateAt, 420);
     const faces = SIDES.filter((s) => smooth[s].has);
+
+    // A masked player is always drawn (they have no picture); frozen with the result frame.
+    for (const s of masked || []) {
+      const sm = smooth[s];
+      if (!sm.has || (state === 'result' && frozen?.[s]?.mesh && cam)) continue;
+      const j = joltOf(s, now);
+      ctx.save();
+      if (j) ctx.translate(j[0], j[1]);
+      drawMesh(meshOf(sm), sm.vis);
+      ctx.restore();
+    }
 
     if (state === 'idle') drawGuides(dt, 1, now);
     if (state === 'ready') {
@@ -396,6 +432,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
       if (frozen && cam) {
         ctx.setTransform(cam.a, 0, 0, cam.a, cam.e, cam.f);
         const midX = (view.cw / 2 - cam.e) / cam.a;
+        for (const s of SIDES) if (frozen[s]?.mesh) drawMesh(frozen[s].mesh, frozen[s].vis);
         for (const s of losers) if (frozen[s]) drawBand(s, frozen[s].ro, frozen[s].lo, frozen[s].vis, t, midX);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       } else {

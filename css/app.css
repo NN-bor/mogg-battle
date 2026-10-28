@@ -622,6 +622,8 @@ button:focus { outline: none; }
 .src-video { position: absolute; left: 0; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
 .link-btn { position: absolute; right: var(--edge); bottom: var(--edge); }
 #app:not([data-net]) .link-btn { display: none; }
+.roulette-btn { position: absolute; right: var(--edge); bottom: calc(var(--edge) + 7vh + 1.6vh); }
+#app:not([data-roulette]) .roulette-btn { display: none; }
 /* At home on a laptop there is a mouse: show it */
 #app[data-remote],
 #app[data-remote] button { cursor: auto; }

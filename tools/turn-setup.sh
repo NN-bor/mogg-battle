@@ -58,18 +58,29 @@ if [ -f /etc/default/coturn ]; then
 fi
 
 # TCP 443 → 3478: the relay is reachable even where only web ports are open.
-iptables -t nat -C PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 3478 2>/dev/null \
-  || iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 3478
-netfilter-persistent save >/dev/null
+# (Not when the site runs on this server too: then 443 is HTTPS, see server-setup.sh.)
+if [ -z "${MOG_NO_443:-}" ]; then
+  iptables -t nat -C PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 3478 2>/dev/null \
+    || iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 3478
+  netfilter-persistent save >/dev/null
+fi
 
 if command -v ufw >/dev/null && ufw status | grep -q active; then
-  ufw allow 3478/udp; ufw allow 3478/tcp; ufw allow 443/tcp; ufw allow 49160:49999/udp
+  ufw allow 3478/udp; ufw allow 3478/tcp; ufw allow 49160:49999/udp
+  [ -n "${MOG_NO_443:-}" ] || ufw allow 443/tcp
 fi
 
 systemctl enable coturn >/dev/null 2>&1 || true
 systemctl restart coturn
 sleep 1
 systemctl is-active --quiet coturn && echo "coturn работает."
+
+# server-setup.sh: the game server hands the relay to browsers itself (/api/config).
+if [ -n "${MOG_ENV:-}" ]; then
+  echo "TURN=mog:$PASS@$IP" > "$MOG_ENV"
+  chmod 640 "$MOG_ENV"
+  exit 0
+fi
 
 echo
 echo "Готово. Строка для игры:"

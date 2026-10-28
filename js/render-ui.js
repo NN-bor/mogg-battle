@@ -12,7 +12,7 @@ const RESULT_HOLD = 2500;
 const VISIBLE = {
   boot: ['screen'],
   nocamera: ['screen'],
-  idle: ['attract', 'record', 'link'],
+  idle: ['attract', 'record', 'link', 'roulette'],
   ready: ['start', 'record'],
   meta: ['chip'],
   countdown: ['cards'],
@@ -75,6 +75,7 @@ export function createUI({ root, bus }) {
     actions: [r.actions],
     record: [r.record],
     link: [$('#btn-link')],
+    roulette: [$('#btn-roulette')],
   };
   let hasRecord = false;
 
