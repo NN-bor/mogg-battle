@@ -57,7 +57,7 @@ export function createRoulette({ bus, root, video, camVideo, settings }) {
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       linked = true;
-      if (started) send({ t: 'queue' });
+      if (started) queue();
     };
     ws.onmessage = (e) => (typeof e.data === 'string' ? control(e.data) : face(e.data));
     ws.onclose = () => {
@@ -66,6 +66,11 @@ export function createRoulette({ bus, root, video, camVideo, settings }) {
       if (matched) lose(was ? 'Нет связи с сервером, переподключаюсь…' : '');
       setTimeout(connect, RETRY_MS);
     };
+  }
+
+  function queue() {
+    send({ t: 'queue' });
+    bus.emit('roulette:search');
   }
 
   function send(msg) {
@@ -87,6 +92,7 @@ export function createRoulette({ bus, root, video, camVideo, settings }) {
       theirs = null;
       serverState = null;
       bus.emit('notice', { text: 'Соперник найден' });
+      bus.emit('roulette:match');
     } else if (msg.t === 'left') {
       lose('Соперник ушёл. Ищем следующего…');
     } else if (msg.t === 'ev' && matched) {
@@ -136,6 +142,7 @@ export function createRoulette({ bus, root, video, camVideo, settings }) {
     if (!linked) return;
     send({ t: 'next' });
     lose('Ищем следующего…');
+    bus.emit('roulette:search');
   });
 
   // Idle headline: who is missing.
@@ -174,7 +181,7 @@ export function createRoulette({ bus, root, video, camVideo, settings }) {
     start() {
       started = true;
       bus.emit('state', { to: 'idle' });
-      send({ t: 'queue' });
+      queue();
     },
     stop() {},
     get state() {

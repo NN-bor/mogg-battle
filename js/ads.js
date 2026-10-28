@@ -80,6 +80,7 @@ export function createAds({ bus, root, ui }) {
       if (shown || closed) return;
       shown = true;
       box.classList.add('on');
+      bus.emit('ad:shown');
       countdown();
     };
     onTap(btn, () => !btn.disabled && close());
