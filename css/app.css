@@ -707,6 +707,30 @@ button:focus { outline: none; }
 .ad-house { font-size: 4vh; font-weight: 800; text-align: center; max-width: 80vh; }
 .ad-go[disabled] { opacity: 0.5; }
 
+/* ───────────── Statistics consent (js/analytics.js) ───────────── */
+.consent {
+  position: absolute;
+  left: var(--edge);
+  top: var(--edge);
+  /* top left: clear of the idle headline at the bottom and of the roulette strip on top */
+  width: max(34vh, 240px);
+  max-width: calc(100vw - 2 * var(--edge));
+  padding: max(1.6vh, 10px) max(2vh, 12px);
+  border-radius: max(2vh, 12px);
+  background: rgba(10, 10, 11, 0.88);
+  border: 1px solid var(--hairline);
+  font-size: max(1.6vh, 12px);
+  line-height: 1.4;
+  color: var(--text-2);
+  opacity: 0;
+  transition: opacity var(--t-mid) var(--ease);
+  cursor: auto;
+}
+.consent.on { opacity: 1; }
+.consent a { color: var(--text); }
+.consent-row { display: flex; gap: 1.2vh; margin-top: 1.2vh; }
+.consent .btn.small { height: max(4.6vh, 32px); font-size: max(1.8vh, 13px); padding: 0 max(2.6vh, 16px); cursor: auto; }
+
 /* ───────────── Settings sheet ───────────── */
 .sheet {
   position: absolute;

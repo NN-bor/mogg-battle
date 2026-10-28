@@ -21,10 +21,11 @@ import { runNetTest } from './nettest.js';
 import { createRoulette, rouletteFromUrl, rouletteOnline } from './roulette.js';
 import { createAds } from './ads.js';
 import { drawCard, saveCard } from './card.js';
+import { createAnalytics } from './analytics.js';
 import { FACE_OVAL, IDX } from './face.js';
 import { el, onTap } from './util.js';
 
-export const VERSION = '1.16.0';
+export const VERSION = '1.17.0';
 
 const MESSAGES = {
   insecure: [
@@ -407,6 +408,11 @@ onTap(linkButton, () => location.assign(`${location.pathname}?host`));
 const cardButton = document.getElementById('btn-card');
 const panel = kiosk && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) >= 1000;
 if (panel) cardButton.remove();
+// Visit statistics: only with a configured counter and the player's yes, never on the panel,
+// and only where the address holds no secrets. Metrica attaches the page address to every
+// goal; the video link's address carries the room code or the connection offer (#…).
+const secretUrl = !!linkPage || isNetTest || !!location.hash || /[?&](turn|peer)=/.test(location.search);
+createAnalytics({ bus, root, mode: roulette ? 'roulette' : 'local', enabled: !panel && !secretUrl });
 let lastResult = null;
 bus.on('round:result', (res) => (lastResult = res));
 onTap(cardButton, async () => {
@@ -416,6 +422,7 @@ onTap(cardButton, async () => {
   const site = (location.host + location.pathname).replace(/\/(index\.html)?$/, '');
   const card = drawCard({ res: lastResult, frame, frozen: lines.frozenState(), labels: { L: label('L'), R: label('R') }, site });
   const how = await saveCard(card);
+  if (how !== 'cancelled') bus.emit('card:saved', { how });
   if (how === 'downloaded') bus.emit('notice', { text: 'Картинка сохранена', ms: 2000 });
 });
 onTap(document.getElementById('btn-roulette'), () => location.assign(`${location.pathname}?roulette`));

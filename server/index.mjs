@@ -27,6 +27,8 @@ const PORT = Number(arg('--port', process.env.PORT || 8787));
 const HOST = arg('--host', '127.0.0.1');
 const STATIC = args.includes('--static') ? resolve(arg('--static', '.')) : null;
 const TURN = process.env.TURN || null;
+// Yandex Metrica counter (js/analytics.js): off unless METRIKA_ID is set.
+const METRIKA = /^\d{4,12}$/.test(process.env.METRIKA_ID || '') ? process.env.METRIKA_ID : null;
 // Ad breaks between games (js/ads.js): off unless ADS_EVERY is set.
 const ADS = process.env.ADS_EVERY ? { every: Number(process.env.ADS_EVERY) || 0, yandex: process.env.ADS_YANDEX || '', house: process.env.ADS_HOUSE || '' } : null;
 
@@ -159,7 +161,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const path = url.pathname.replace(/^.*?\/api\//, '/api/');
   if (path === '/api/online') return json(res, { n: clients.size, waiting: waiting.length });
-  if (path === '/api/config') return json(res, { turn: TURN, ...(ADS && { ads: ADS }) });
+  if (path === '/api/config') return json(res, { turn: TURN, ...(ADS && { ads: ADS }), ...(METRIKA && { metrika: METRIKA }) });
   if (!STATIC) {
     res.writeHead(404);
     return res.end();
