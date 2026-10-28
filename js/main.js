@@ -20,10 +20,11 @@ import { deliverReply } from './direct.js';
 import { runNetTest } from './nettest.js';
 import { createRoulette, rouletteFromUrl, rouletteOnline } from './roulette.js';
 import { createAds } from './ads.js';
+import { drawCard, saveCard } from './card.js';
 import { FACE_OVAL, IDX } from './face.js';
 import { el, onTap } from './util.js';
 
-export const VERSION = '1.15.0';
+export const VERSION = '1.16.0';
 
 const MESSAGES = {
   insecure: [
@@ -399,6 +400,24 @@ if (!remote && !roulette && !kiosk && navigator.onLine) {
   });
 }
 onTap(linkButton, () => location.assign(`${location.pathname}?host`));
+
+// ───── "Для TikTok": the result as a vertical picture (card.js) ─────
+// Not on the school panel (the installed app full-screen on a big touch screen): it is a
+// shared screen, there is nobody's phone to save to.
+const cardButton = document.getElementById('btn-card');
+const panel = kiosk && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) >= 1000;
+if (panel) cardButton.remove();
+let lastResult = null;
+bus.on('round:result', (res) => (lastResult = res));
+onTap(cardButton, async () => {
+  const frame = still.frame();
+  if (!frame || !lastResult || mode.state !== 'result') return;
+  const label = (s) => root.querySelector(`.card[data-side="${s}"] .card-label`)?.firstChild?.nodeValue?.trim() || '';
+  const site = (location.host + location.pathname).replace(/\/(index\.html)?$/, '');
+  const card = drawCard({ res: lastResult, frame, frozen: lines.frozenState(), labels: { L: label('L'), R: label('R') }, site });
+  const how = await saveCard(card);
+  if (how === 'downloaded') bus.emit('notice', { text: 'Картинка сохранена', ms: 2000 });
+});
 onTap(document.getElementById('btn-roulette'), () => location.assign(`${location.pathname}?roulette`));
 // Hidden settings: hold the empty top-left corner for 1.5 s.
 bindLongPress(document.getElementById('hotspot'), 1500, () => sheet.open());

@@ -17,7 +17,7 @@ const JAW_L = [454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152];
 const THIRDS = [[109, 338], [21, 251], [132, 361], [148, 377]];
 
 // The roulette opponent's mask (no camera, face points only): features drawn over the dots.
-const MESH = [
+export const MESH = [
   [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7, 33],
   [263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249, 263],
   [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61],
@@ -26,6 +26,9 @@ const MESH = [
   [300, 293, 334, 296, 336],
   [168, 6, 197, 195, 5, 4, 1, 19, 94, 2],
 ];
+
+// The whole outline: over the forehead, down one jaw to the chin, up the other.
+export const OUTLINE = [...CONTOUR_UPPER, ...JAW_L.slice(1), ...JAW_R.slice(0, -1).reverse()];
 
 const EYES = [
   { outer: IDX.rOuter, inner: IDX.rInner },
@@ -136,7 +139,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     ctx.fillStyle = WHITE;
     for (const p of pts) ctx.fillRect(p[0] - r, p[1] - r, 2 * r, 2 * r);
     for (const line of MESH) stroke(line.map((i) => pts[i]), WHITE, alpha * 0.85);
-    stroke([...CONTOUR_UPPER, ...JAW_L.slice(1), ...JAW_R.slice(0, -1).reverse()].map((i) => pts[i]), WHITE, alpha * 0.85); // the whole outline
+    stroke(OUTLINE.map((i) => pts[i]), WHITE, alpha * 0.85);
     for (const i of [468, 473]) dot(pts[i], WHITE, alpha, LW * 2.2);
   }
 
@@ -448,5 +451,6 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
   }
 
   // pointCam: stabilized landmark in camera coordinates (diagnostics, jitter tests).
-  return { draw, smooth, freeze, thaw: () => (frozen = null), pointCam: (side, i) => stab[side].point(i) };
+  // frozenState: the result frame's eye corners (and masks) per side, in canvas px (card.js).
+  return { draw, smooth, freeze, thaw: () => (frozen = null), frozenState: () => frozen, pointCam: (side, i) => stab[side].point(i) };
 }
