@@ -1,6 +1,7 @@
 import { el, onTap } from './util.js';
 import { CHANNEL, adapt, codeFrom, gathered, pack, preferVP8, unpack } from './direct.js';
 import { OWN_TURN } from './turn-config.js';
+import { createGlue } from './glue.js';
 
 // Remote duel by link: two people, two devices, one fight. Opt-in: the app touches the
 // network only when it is opened with ?host or ?join=<room>. The panel's normal mode stays
@@ -19,7 +20,6 @@ import { OWN_TURN } from './turn-config.js';
 // two links through the messenger.
 
 const PREFIX = 'mogbattle-';
-const W = 1280, H = 720; // the glued picture; each player gets one half
 // Host → guest: what the duel tells the screen. The guest's own detector draws the mask,
 // these keep the round, the scores and the result identical on both screens.
 const SYNC = ['state', 'notice', 'round:meta', 'round:countdown', 'round:scan', 'round:progress', 'score:live', 'round:lock', 'round:result', 'series', 'streak'];
@@ -44,10 +44,27 @@ const FREE_ICE = [
   { urls: ['turn:freestun.net:3478', 'turns:freestun.net:5350'], username: 'free', credential: 'free' },
 ];
 
+// On our own server (tools/server-setup.sh) the relay comes from the server: /api/config.
+let serverTurn = null;
+let configLoad = null;
+export function serverConfig() {
+  configLoad ||= (async () => {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 2500);
+      const res = await fetch(`${location.pathname.replace(/[^/]*$/, '')}api/config`, { signal: ctl.signal, cache: 'no-store' });
+      clearTimeout(timer);
+      const body = res.ok ? await res.json() : null;
+      if (typeof body?.turn === 'string') serverTurn = body.turn;
+    } catch {}
+  })();
+  return configLoad;
+}
+
 // "user:password@host[:port]" → STUN and TURN on that server (UDP and TCP, plus TCP 443,
 // which tools/turn-setup.sh forwards to the relay).
 export function ownTurn() {
-  const spec = new URLSearchParams(location.search).get('turn') || OWN_TURN;
+  const spec = new URLSearchParams(location.search).get('turn') || serverTurn || OWN_TURN;
   const m = /^([^:@]+):([^@]+)@([^:/]+)(?::(\d+))?$/.exec(spec || '');
   if (!m) return null;
   const [, username, credential, host, port = '3478'] = m;
@@ -153,11 +170,8 @@ export function createRemote({ role, room, direct = false, bus, root, ui, video,
   const peerVideo = el('video', { class: 'src-video', muted: true, playsinline: true, autoplay: true });
   peerVideo.muted = true;
   root.append(peerVideo);
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d', { alpha: false });
-  let stream = null;
+  // The host always lands on the screen's left.
+  const glue = createGlue({ video, settings, left: () => (host ? camVideo : peerVideo), right: () => (host ? peerVideo : camVideo) });
 
   let peer = null;
   let conn = null;
@@ -167,47 +181,9 @@ export function createRemote({ role, room, direct = false, bus, root, ui, video,
   let failed = false;
   const last = new Map();
 
-  // ───── the glued picture ─────
-  function tile(src, x0) {
-    const w = src.videoWidth, h = src.videoHeight;
-    if (!w || !h || src.readyState < 2) {
-      ctx.fillStyle = '#000';
-      ctx.fillRect(x0, 0, W / 2, H);
-      return;
-    }
-    // Largest crop with the half's aspect, a bit above centre (faces sit high in a frame).
-    const a = W / 2 / H;
-    let cw = w, ch = h;
-    if (w / h > a) cw = h * a;
-    else ch = w / a;
-    ctx.drawImage(src, (w - cw) / 2, (h - ch) * 0.4, cw, ch, x0, 0, W / 2, H);
-  }
-
-  function paint() {
-    requestAnimationFrame(paint);
-    // The view mirrors the picture: the host's half goes where it lands on the left.
-    const hostX = settings.get('mirror') ? W / 2 : 0;
-    const [a, b] = host ? [camVideo, peerVideo] : [peerVideo, camVideo];
-    tile(a, hostX);
-    tile(b, W / 2 - hostX);
-  }
-
   // Called once the local camera runs (again): the main video shows the glued picture.
   async function attach() {
-    if (!stream) {
-      stream = canvas.captureStream(30);
-      requestAnimationFrame(paint);
-    }
-    if (video.srcObject !== stream) {
-      video.srcObject = stream;
-      await video.play().catch(() => {});
-    }
-    if (!video.videoWidth) {
-      await new Promise((resolve) => {
-        video.addEventListener('resize', resolve, { once: true });
-        setTimeout(resolve, 3000);
-      });
-    }
+    await glue.attach();
     // A new camera mid-game: swap the track in the running call.
     const track = camVideo.srcObject?.getVideoTracks()[0];
     const sender = (call || conn)?.peerConnection?.getSenders().find((s) => s.track?.kind === 'video');
@@ -222,6 +198,7 @@ export function createRemote({ role, room, direct = false, bus, root, ui, video,
 
   let began = false;
   async function connect() {
+    await serverConfig();
     if (direct) {
       if (began) return;
       began = true;
