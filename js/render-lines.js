@@ -6,6 +6,7 @@ import { clamp, lerp, expAlpha, progress } from './util.js';
 // Lines come from real landmarks; only the score is theatre.
 
 const WORD = 'MOGGED!';
+const NPC_WORD = 'NPC'; // a photo held up to the camera (liveness.js)
 const BAND = '#000';
 
 // Face contour from the ear-level points over the forehead, and the two jaw halves to the chin.
@@ -310,6 +311,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
   // ro, lo: the outer eye corners in canvas px. midX: the screen's centre line in the same
   // coordinates; the band never crosses into the other player's half.
   function drawBand(side, ro, lo, alpha, t, midX = view.cw / 2) {
+    const word = result?.npc?.[side] ? NPC_WORD : WORD;
     const vh = view.vh;
     let d = unit(sub(lo, ro));
     if (d[0] < 0) d = [-d[0], -d[1]]; // the word always reads left to right
@@ -320,7 +322,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
     ctx.font = `900 expanded ${fs}px Archivo, Inter, system-ui, sans-serif`;
     if ('fontStretch' in ctx) ctx.fontStretch = 'expanded';
     ctx.letterSpacing = '0px';
-    const m = ctx.measureText(WORD);
+    const m = ctx.measureText(word);
     // Long enough for the word with margins, centered on the eyes.
     const reach = Math.max(span * 1.7, m.width / 2 + thick * 0.6, 18 * vh);
     const toCenter = side === 'L' ? midX - c[0] : c[0] - midX;
@@ -347,7 +349,7 @@ export function createLineRenderer({ canvas, view, bus, settings, slots, stab, g
       ctx.globalAlpha = alpha * k;
       ctx.fillStyle = MOG;
       // Optical centering on the cap height (no descenders in the word).
-      ctx.fillText(WORD, 0, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+      ctx.fillText(word, 0, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
     }
     ctx.restore();
   }

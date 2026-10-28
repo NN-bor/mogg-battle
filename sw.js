@@ -4,7 +4,7 @@
 // After the first visit the app makes no network requests at all (except the remote duel by
 // link, js/remote.js, which loads vendor/peerjs on demand and talks to the PeerJS server).
 
-const APP_VERSION = '1.14.0';
+const APP_VERSION = '1.15.0';
 const ASSET_VERSION = 'mp-0.10.35-inter-5.3.0';
 const APP_CACHE = `mog-app-${APP_VERSION}`;
 const ASSET_CACHE = `mog-assets-${ASSET_VERSION}`;
@@ -43,6 +43,10 @@ const APP_FILES = [
   'js/glue.js',
   'js/faceframe.js',
   'js/roulette.js',
+  'js/server-config.js',
+  'js/liveness.js',
+  'js/ads.js',
+  'js/ads-config.js',
   'img/chicken.webp',
   'img/hammer.webp',
   'icons/icon.svg',

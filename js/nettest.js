@@ -1,5 +1,5 @@
 import { el } from './util.js';
-import { iceServers, ownTurn, serverConfig } from './remote.js';
+import { iceServers, ownTurn, loadServerTurn } from './remote.js';
 
 // Network check for the remote duel (?nettest): which of the ways two browsers can find
 // each other work on this network. Each STUN server tells whether a direct path is
@@ -47,7 +47,7 @@ const short = (url) => url.replace(/^(stun|turns?):/, (m) => (m === 'turns:' ? '
 export async function runNetTest({ ui, bus, root }) {
   bus.emit('state', { to: 'boot' }); // shows the full screen
   ui.screen('loading', 'Проверка сети', 'Секунд 10…');
-  await serverConfig();
+  await loadServerTurn();
 
   const ice = iceServers();
   const stun = ice.filter((s) => !s.username).flatMap((s) => s.urls.map((u) => ({ url: u, server: { urls: u } })));

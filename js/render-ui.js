@@ -111,7 +111,7 @@ export function createUI({ root, bus }) {
   function resetCards() {
     for (const side of SIDES) {
       cancelAnimationFrame(score[side].anim);
-      r.cards[side].classList.remove('locked', 'win', 'lose');
+      r.cards[side].classList.remove('locked', 'win', 'lose', 'npc');
       show(side, NaN);
     }
   }
@@ -185,10 +185,18 @@ export function createUI({ root, bus }) {
   });
 
   // Lock: the running number glides to its final value, then a small pop.
-  bus.on('round:lock', ({ side, score: target, ms = 380 }) => {
+  bus.on('round:lock', ({ side, score: target, npc, ms = 380 }) => {
     const s = score[side];
     cancelAnimationFrame(s.anim);
     r.cards[side].classList.add('locked');
+    // A photo held up to the camera gets no number at all.
+    if (npc) {
+      r.cards[side].classList.add('npc');
+      show(side, NaN);
+      s.num.textContent = 'NPC';
+      s.num.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 320, easing: EASING });
+      return;
+    }
     const from = Number.isFinite(s.shown) ? s.shown : target;
     const start = performance.now();
     const step = (now) => {
@@ -240,11 +248,17 @@ export function createUI({ root, bus }) {
     if (text) r.fps.textContent = text;
   }
 
+  // Taps between rounds may be held up by a gate first (an ad break, ads.js).
+  const gates = [];
+  const act = (name) => {
+    for (const gate of gates) if (gate(name, () => bus.emit(name))) return;
+    bus.emit(name);
+  };
   onTap(r.start, () => bus.emit('ui:start'));
-  onTap($('#btn-rematch'), () => bus.emit('ui:rematch'));
-  onTap($('#btn-new'), () => bus.emit('ui:new'));
+  onTap($('#btn-rematch'), () => act('ui:rematch'));
+  onTap($('#btn-new'), () => act('ui:new'));
   onTap($('#btn-retry'), () => bus.emit('ui:retry'));
   onTap($('#btn-screen-settings'), () => bus.emit('ui:settings'));
 
-  return { screen, setFps, get state() { return state; } };
+  return { screen, setFps, act, gate: (fn) => gates.push(fn), get state() { return state; } };
 }

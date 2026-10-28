@@ -19,10 +19,11 @@ import { createRemote, remoteFromUrl } from './remote.js';
 import { deliverReply } from './direct.js';
 import { runNetTest } from './nettest.js';
 import { createRoulette, rouletteFromUrl, rouletteOnline } from './roulette.js';
+import { createAds } from './ads.js';
 import { FACE_OVAL, IDX } from './face.js';
 import { el, onTap } from './util.js';
 
-export const VERSION = '1.14.0';
+export const VERSION = '1.15.0';
 
 const MESSAGES = {
   insecure: [
@@ -83,6 +84,7 @@ const still = createStill({ canvas: document.getElementById('still'), source: sc
 const aura = createAura({ layer: document.getElementById('aura'), bus, players, getBox: faceBox });
 const cameo = createCameo({ layer: document.getElementById('cameo'), bus, settings, getJaw: jawPoint });
 const record = createRecord();
+createAds({ bus, root, ui }); // off unless configured (ads-config.js, /api/config)
 const remote = remoteUrl && createRemote({ ...remoteUrl, bus, root, ui, video, camVideo, settings });
 const roulette = isRoulette ? createRoulette({ bus, root, video, camVideo, settings }) : null;
 // The guest's round is run by the host, the roulette's by the server; they only follow events.
@@ -291,11 +293,19 @@ function frame(now) {
     const s = tracker?.stats;
     ui.setFps(
       settings.get('fps') && s
-        ? `${s.app} fps  ·  det ${s.det}  ·  ${s.ms.toFixed(1)} ms  ·  ${s.input}  ·  ${s.delegate}${s.skip > 1 ? `  ·  skip ${s.skip}` : ''}${lookInfo()}`
+        ? `${s.app} fps  ·  det ${s.det}  ·  ${s.ms.toFixed(1)} ms  ·  ${s.input}  ·  ${s.delegate}${s.skip > 1 ? `  ·  skip ${s.skip}` : ''}${lookInfo()}${liveInfo}`
         : null
     );
   }
 }
+
+// The last round's photo check (liveness.js), for calibrating on a real panel: shape/expression
+// wobble per side, "b" when a blink was seen; NPC below 0.016/0.019 without a blink.
+let liveInfo = '';
+bus.on('round:result', (res) => {
+  const f = (l) => (l?.shape == null ? '—' : `${l.shape.toFixed(3)}/${l.expr?.toFixed(3) ?? '—'}${l.blinks ? 'b' : ''}`);
+  liveInfo = res.live ? `  ·  живость L ${f(res.live.L)} R ${f(res.live.R)}` : '';
+});
 
 function lookInfo() {
   const l = look.stats;
@@ -414,7 +424,7 @@ document.addEventListener('keydown', (e) => {
   if ((e.key === 'Enter' || e.key === ' ') && !sheet.isOpen) {
     e.preventDefault();
     if (mode.state === 'ready') bus.emit('ui:start');
-    else if (mode.state === 'result') bus.emit('ui:rematch');
+    else if (mode.state === 'result') ui.act('ui:rematch');
   }
 });
 
