@@ -197,10 +197,11 @@ export function createDuelMode({ bus, settings, slots, players, record, attractF
         enter() {
           const finals = { L: players.L.endScan(), R: players.R.endScan() };
           const res = (round.result = computeRound(finals, meta, Number(settings.get('noise')) || 0));
-          // Runner-up first, like a game show: the second number decides.
-          const order = res.scores.L <= res.scores.R ? ['L', 'R'] : ['R', 'L'];
+          // Runner-up first, like a game show: the second number decides. An NPC goes first.
+          const rank = (s) => (res.npc[s] ? -1 : res.scores[s]);
+          const order = rank('L') <= rank('R') ? ['L', 'R'] : ['R', 'L'];
           order.forEach((side, i) => {
-            fsm.after(T.lock * (i + 1), () => bus.emit('round:lock', { side, score: res.scores[side], isLast: i === 1 }));
+            fsm.after(T.lock * (i + 1), () => bus.emit('round:lock', { side, score: res.scores[side], npc: res.npc[side], isLast: i === 1 }));
           });
           fsm.after(T.lock * 2 + T.settle, () => fsm.go('result'));
         },
@@ -217,10 +218,14 @@ export function createDuelMode({ bus, settings, slots, players, record, attractF
             setSeries(series.L + (res.winner === 'L'), series.R + (res.winner === 'R'));
             setStreak({ ...streak, [res.winner]: streak[res.winner] + 1, [res.loser]: 0 });
           }
-          const best = record.submit(Math.max(res.scores.L, res.scores.R));
+          // A photo's number doesn't count for the record of the day.
+          const real = SIDES.filter((s) => !res.npc[s]).map((s) => res.scores[s]);
+          const best = real.length ? record.submit(Math.max(...real)) : { value: record.value, isNew: false };
           bus.emit('round:result', { ...res, streak: { ...streak } });
           bus.emit('record', { value: best.value });
-          const text = [res.draw ? 'Ничья' : '', best.isNew ? `Новый рекорд дня: ${scoreText(best.value)}` : '']
+          const npcs = SIDES.filter((s) => res.npc[s]).length;
+          const verdict = npcs === 2 ? 'Тут одни NPC' : npcs ? 'Фото не моггает' : res.draw ? 'Ничья' : '';
+          const text = [verdict, best.isNew ? `Новый рекорд дня: ${scoreText(best.value)}` : '']
             .filter(Boolean)
             .join(' · ');
           if (text) bus.emit('notice', { text, ms: 0 });

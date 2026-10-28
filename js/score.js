@@ -1,4 +1,5 @@
 import { clamp } from './util.js';
+import { isNpc } from './liveness.js';
 
 // Six metrics live inside the system; players only ever see one number per face:
 // a total on a 10-point scale. Each metric 0..1 → squared (nonlinear) → noise →
@@ -81,6 +82,16 @@ export function computeRound(finals, meta, noise) {
   out.margin = Math.abs(L - R) / Math.max(L, R, 0.01);
   out.draw = Math.abs(L - R) < DRAW_POINTS;
   out.winner = out.draw ? null : L > R ? 'L' : 'R';
+  // A photo held up to the camera ("NPC") loses to any live face; two photos: a draw.
+  out.npc = { L: isNpc(finals.L.LIVE), R: isNpc(finals.R.LIVE) };
+  out.live = { L: finals.L.LIVE, R: finals.R.LIVE };
+  if (out.npc.L !== out.npc.R) {
+    out.draw = false;
+    out.winner = out.npc.L ? 'R' : 'L';
+  } else if (out.npc.L) {
+    out.draw = true;
+    out.winner = null;
+  }
   out.loser = out.draw ? null : out.winner === 'L' ? 'R' : 'L';
 
   // Internal only (handy in ?debug): the metric where the winner gained the most.

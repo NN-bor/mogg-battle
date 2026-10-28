@@ -280,6 +280,9 @@ button:focus { outline: none; }
 }
 .card.locked .card-score b { opacity: 1; }
 .card.win .card-score b { color: var(--accent); }
+/* A photo held up to the camera (liveness.js): no number, just NPC */
+.card.npc .card-score b { color: var(--mog); }
+.card.npc .card-score small { visibility: hidden; }
 .card-score small {
   font-size: 3.2vh;
   font-weight: 700;
@@ -674,6 +677,35 @@ button:focus { outline: none; }
     z-index: 10;
   }
 }
+
+/* ───────────── Ad break between games (js/ads.js) ───────────── */
+.adbreak {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3vh;
+  background: var(--bg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-mid) var(--ease);
+}
+.adbreak.on { opacity: 1; pointer-events: auto; }
+.ad-label {
+  position: absolute;
+  top: var(--edge);
+  left: var(--edge);
+  font-size: 1.8vh;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.ad-slot { width: min(92vw, 120vh); min-height: 40vh; display: flex; align-items: center; justify-content: center; }
+.ad-house { font-size: 4vh; font-weight: 800; text-align: center; max-width: 80vh; }
+.ad-go[disabled] { opacity: 0.5; }
 
 /* ───────────── Settings sheet ───────────── */
 .sheet {

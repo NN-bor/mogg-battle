@@ -97,5 +97,7 @@ echo
 echo "Готово: https://$DOMAIN"
 echo "Рулетка: https://$DOMAIN/?roulette"
 echo "Первое открытие может занять ~10 с: Caddy получает сертификат."
+echo "Реклама между играми (выключена): допиши в /etc/mog.env ADS_EVERY=3 и ADS_YANDEX=R-A-…,"
+echo "потом: systemctl restart mog"
 echo "Если у хостинга есть свой файрвол в панели, открой там порты 80, 443 (TCP),"
 echo "3478 (UDP+TCP) и 49160-49999 (UDP)."

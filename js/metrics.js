@@ -1,5 +1,6 @@
 import { IDX, SYM_PAIRS, METRIC_POINTS, poseFromMatrix, poseFromLandmarks, frontalize, sub, dot, len, mid, unit } from './face.js';
 import { clamp, invLerp, expAlpha, DEG } from './util.js';
+import { createLiveness } from './liveness.js';
 
 // Six metrics, each 0..1. Two kinds:
 //
@@ -134,6 +135,7 @@ export function createPlayerMetrics() {
     shape: null,    // averaged neutral face: { mean: Float64Array(2K), w }
     scan: null,
     epoch: -1,
+    lv: createLiveness(), // photo check (liveness.js)
   };
 
   function reset(t = performance.now()) {
@@ -145,12 +147,14 @@ export function createPlayerMetrics() {
     s.hist = [];
     s.shape = null;
     s.scan = null;
+    s.lv.reset();
   }
 
   function measure(face, t, dt, aspect) {
     const { lm, bs } = face;
     const pose = face.mat ? poseFromMatrix(face.mat) : poseFromLandmarks(lm, aspect);
     const F = frontalize(lm, METRIC_POINTS, pose.R, aspect);
+    s.lv.update(face, pose.R, aspect, dt);
     const iod =
       len(sub(F[IDX.lIris], F[IDX.rIris])) ||
       len(sub(mid(F[IDX.rOuter], F[IDX.rInner]), mid(F[IDX.lOuter], F[IDX.lInner]))) ||
@@ -204,6 +208,7 @@ export function createPlayerMetrics() {
     if (!s.blink.closed && blink > closeAt) {
       s.blink.closed = true;
       s.blink.last = t;
+      s.lv.blink(); // a blink proves a live face
     } else if (s.blink.closed && blink < closeAt - 0.14) {
       s.blink.closed = false;
       s.blink.last = t;
@@ -305,6 +310,7 @@ export function createPlayerMetrics() {
     },
     beginScan() {
       s.scan = { sum: Object.fromEntries(KEYS.map((k) => [k, 0])), dt: 0 };
+      s.lv.begin();
     },
     // Time-weighted mean over the scan: one blink or twitch cannot decide a round.
     endScan() {
@@ -312,6 +318,7 @@ export function createPlayerMetrics() {
       s.scan = null;
       const out = {};
       for (const k of KEYS) out[k] = sc?.dt ? sc.sum[k] / sc.dt : s.q?.[k] ?? 0;
+      out.LIVE = s.lv.end(); // {shape, expr, blinks, n}: is this a photo? (liveness.js)
       return out;
     },
     get q() {

@@ -2,6 +2,7 @@ import { el, onTap } from './util.js';
 import { CHANNEL, adapt, codeFrom, gathered, pack, preferVP8, unpack } from './direct.js';
 import { OWN_TURN } from './turn-config.js';
 import { createGlue } from './glue.js';
+import { serverConfig } from './server-config.js';
 
 // Remote duel by link: two people, two devices, one fight. Opt-in: the app touches the
 // network only when it is opened with ?host or ?join=<room>. The panel's normal mode stays
@@ -46,19 +47,9 @@ const FREE_ICE = [
 
 // On our own server (tools/server-setup.sh) the relay comes from the server: /api/config.
 let serverTurn = null;
-let configLoad = null;
-export function serverConfig() {
-  configLoad ||= (async () => {
-    try {
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 2500);
-      const res = await fetch(`${location.pathname.replace(/[^/]*$/, '')}api/config`, { signal: ctl.signal, cache: 'no-store' });
-      clearTimeout(timer);
-      const body = res.ok ? await res.json() : null;
-      if (typeof body?.turn === 'string') serverTurn = body.turn;
-    } catch {}
-  })();
-  return configLoad;
+export async function loadServerTurn() {
+  const { turn } = await serverConfig();
+  if (typeof turn === 'string') serverTurn = turn;
 }
 
 // "user:password@host[:port]" → STUN and TURN on that server (UDP and TCP, plus TCP 443,
@@ -198,7 +189,7 @@ export function createRemote({ role, room, direct = false, bus, root, ui, video,
 
   let began = false;
   async function connect() {
-    await serverConfig();
+    await loadServerTurn();
     if (direct) {
       if (began) return;
       began = true;

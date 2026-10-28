@@ -27,6 +27,8 @@ const PORT = Number(arg('--port', process.env.PORT || 8787));
 const HOST = arg('--host', '127.0.0.1');
 const STATIC = args.includes('--static') ? resolve(arg('--static', '.')) : null;
 const TURN = process.env.TURN || null;
+// Ad breaks between games (js/ads.js): off unless ADS_EVERY is set.
+const ADS = process.env.ADS_EVERY ? { every: Number(process.env.ADS_EVERY) || 0, yandex: process.env.ADS_YANDEX || '', house: process.env.ADS_HOUSE || '' } : null;
 
 const MAX_CLIENTS = 2000;
 const MAX_PER_IP = 8;
@@ -157,7 +159,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const path = url.pathname.replace(/^.*?\/api\//, '/api/');
   if (path === '/api/online') return json(res, { n: clients.size, waiting: waiting.length });
-  if (path === '/api/config') return json(res, { turn: TURN });
+  if (path === '/api/config') return json(res, { turn: TURN, ...(ADS && { ads: ADS }) });
   if (!STATIC) {
     res.writeHead(404);
     return res.end();
