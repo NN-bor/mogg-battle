@@ -41,6 +41,7 @@ const PING_MS = 15000;
 // ───── players ─────
 const clients = new Set();
 const waiting = [];            // in the queue, in order
+const privates = new Map();    // a friend's room (?room=code): code → the one waiting in it
 let nextId = 1;
 
 function send(c, msg) {
@@ -58,6 +59,15 @@ function broadcastOnline() {
 
 function enqueue(c) {
   if (c.room || waiting.includes(c)) return;
+  // A friend's room: the two with the same code meet, nobody else.
+  if (c.code) {
+    const other = privates.get(c.code);
+    if (other && other !== c && clients.has(other) && !other.room) {
+      privates.delete(c.code);
+      pair(other, c);
+    } else privates.set(c.code, c);
+    return;
+  }
   waiting.push(c);
   match();
 }
@@ -65,6 +75,7 @@ function enqueue(c) {
 function dequeue(c) {
   const i = waiting.indexOf(c);
   if (i >= 0) waiting.splice(i, 1);
+  if (c.code && privates.get(c.code) === c) privates.delete(c.code);
 }
 
 // Pair the longest waiting player with the next one, preferring someone new over the
@@ -132,7 +143,12 @@ function onMessage(c, data, isBinary) {
   } catch {
     return;
   }
-  if (msg.t === 'queue') enqueue(c);
+  if (msg.t === 'queue') {
+    const code = typeof msg.room === 'string' && /^[a-z0-9]{4,12}$/.test(msg.room) ? msg.room : null;
+    if (code !== c.code) dequeue(c);
+    c.code = code;
+    enqueue(c);
+  }
   else if (msg.t === 'next') leave(c, { requeue: true });
   else if (msg.t === 'ui' && c.room) c.room.ui(c.seat, msg.name);
 }
@@ -160,7 +176,7 @@ function json(res, body) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const path = url.pathname.replace(/^.*?\/api\//, '/api/');
-  if (path === '/api/online') return json(res, { n: clients.size, waiting: waiting.length });
+  if (path === '/api/online') return json(res, { n: clients.size, waiting: waiting.length, rooms: privates.size });
   if (path === '/api/config') return json(res, { turn: TURN, ...(ADS && { ads: ADS }), ...(METRIKA && { metrika: METRIKA }) });
   if (!STATIC) {
     res.writeHead(404);
@@ -194,7 +210,7 @@ server.on('upgrade', (req, socket, head) => {
     return;
   }
   wss.handleUpgrade(req, socket, head, (ws) => {
-    const c = { id: nextId++, ws, ip, room: null, seat: 0, partner: null, lastPartner: 0, frameAt: 0, alive: true };
+    const c = { id: nextId++, ws, ip, code: null, room: null, seat: 0, partner: null, lastPartner: 0, frameAt: 0, alive: true };
     clients.add(c);
     perIp.set(ip, (perIp.get(ip) || 0) + 1);
     broadcastOnline();

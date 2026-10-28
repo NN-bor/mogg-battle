@@ -18,6 +18,10 @@ const RETRY_MS = 3000;
 const MAX_BUFFERED = 64 << 10;
 
 export const rouletteFromUrl = () => new URLSearchParams(location.search).has('roulette');
+// A friend's room (?room=code): the same mask duel through the server, but only the two who
+// opened the same link meet. Works wherever the site opens (WebSocket on the site's own port).
+export const roomFromUrl = () => (new URLSearchParams(location.search).get('room') || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12) || null;
+export const newRoomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
 
 // The roulette server sits next to the site: <site>/ws and <site>/api/.
 const siteBase = () => location.pathname.replace(/[^/]*$/, '');
@@ -36,8 +40,11 @@ export async function rouletteOnline() {
   }
 }
 
-export function createRoulette({ bus, root, video, camVideo, settings }) {
+// room: a friend's room code, or null for a random stranger.
+export function createRoulette({ bus, root, video, camVideo, settings, room = null }) {
   root.dataset.remote = 'roulette';
+  const them = room ? 'Друг' : 'Соперник';
+  const link = room ? `${location.origin}${location.pathname}?room=${room}` : '';
   const glue = createGlue({ video, settings, left: () => camVideo, right: () => null });
 
   let ws = null;
@@ -69,7 +76,7 @@ export function createRoulette({ bus, root, video, camVideo, settings }) {
   }
 
   function queue() {
-    send({ t: 'queue' });
+    send(room ? { t: 'queue', room } : { t: 'queue' });
     bus.emit('roulette:search');
   }
 
@@ -91,10 +98,10 @@ export function createRoulette({ bus, root, video, camVideo, settings }) {
       matched = true;
       theirs = null;
       serverState = null;
-      bus.emit('notice', { text: 'Соперник найден' });
+      bus.emit('notice', { text: room ? 'Друг подключился' : 'Соперник найден' });
       bus.emit('roulette:match');
     } else if (msg.t === 'left') {
-      lose('Соперник ушёл. Ищем следующего…');
+      lose(room ? 'Друг вышел. Ждём его по той же ссылке' : 'Соперник ушёл. Ищем следующего…');
     } else if (msg.t === 'ev' && matched) {
       let data = msg.data;
       if (msg.name === 'state') serverState = data?.to;
@@ -150,32 +157,51 @@ export function createRoulette({ bus, root, video, camVideo, settings }) {
     if (follower.state !== 'idle') return;
     let a = null;
     if (!linked) a = { title: 'Нет связи', sub: 'Переподключаюсь к серверу…' };
+    else if (!matched && room) a = { title: 'Позови друга', sub: 'Отправь ему ссылку сверху' };
     else if (!matched) a = { title: 'Ищем соперника', sub: online > 1 ? `Онлайн: ${online}` : 'Пока никого. Кинь другу ссылку на сайт' };
-    else if (!slots.L.present) a = { title: 'Встань в кадр', sub: 'Соперник уже ждёт' };
-    else if (!slots.R.present) a = { title: 'Соперник отошёл', sub: 'Ждём его в кадре' };
+    else if (!slots.L.present) a = { title: 'Встань в кадр', sub: `${them} уже ждёт` };
+    else if (!slots.R.present) a = { title: `${them} отошёл`, sub: 'Ждём в кадре' };
     bus.emit('attract', a || { title: 'Кто кого?', sub: 'Сейчас начнём' });
   });
 
   // ───── who is who, and the strip on top ─────
-  for (const [side, text] of [['L', 'Ты'], ['R', 'Соперник']]) {
+  for (const [side, text] of [['L', 'Ты'], ['R', them]]) {
     const label = root.querySelector(`.card[data-side="${side}"] .card-label`);
     if (label?.firstChild?.nodeType === Node.TEXT_NODE) label.firstChild.nodeValue = text;
   }
+  // A friend's room has nobody "next": the result offers only a rematch.
   const newBtn = root.querySelector('#btn-new');
-  if (newBtn) newBtn.textContent = 'Следующий';
+  if (newBtn && room) newBtn.remove();
+  else if (newBtn) newBtn.textContent = 'Следующий';
 
   const count = el('b', { class: 'invite-url' });
-  const next = el('button', { class: 'btn small primary', type: 'button', text: 'Следующий' });
+  const share = !!navigator.share && matchMedia('(pointer: coarse)').matches;
+  const next = room
+    ? el('button', { class: 'btn small primary', type: 'button', text: share ? 'Отправить' : 'Скопировать' })
+    : el('button', { class: 'btn small primary', type: 'button', text: 'Следующий' });
   const quit = el('button', { class: 'btn small secondary', type: 'button', text: 'Выйти' });
-  const strip = el('div', { class: 'invite v rise' }, [el('div', { class: 'invite-text' }, [el('span', { class: 'invite-label', text: 'Случайный соперник · он видит только маску' }), count]), next, quit]);
+  const label = room ? 'Ссылка для друга · через сервер, видна маска' : 'Случайный соперник · он видит только маску';
+  const strip = el('div', { class: 'invite v rise' }, [el('div', { class: 'invite-text' }, [el('span', { class: 'invite-label', text: label }), count]), next, quit]);
   root.querySelector('#cameo').before(strip);
-  onTap(next, () => bus.emit('ui:new'));
+  onTap(next, async () => {
+    if (!room) return bus.emit('ui:new');
+    try {
+      if (share) await navigator.share({ title: 'mog battle', text: 'Кто кого? Заходи:', url: link });
+      else {
+        await navigator.clipboard.writeText(link);
+        next.textContent = 'Скопировано';
+        setTimeout(() => (next.textContent = 'Скопировать'), 1800);
+      }
+    } catch {}
+  });
   onTap(quit, () => location.assign(location.pathname));
   function setStrip() {
-    count.textContent = online ? `Онлайн: ${online}` : '…';
+    if (room) count.textContent = link.replace(/^https?:\/\//, '');
+    else count.textContent = online ? `Онлайн: ${online}` : '…';
   }
   setStrip();
-  bus.on('state', ({ to }) => strip.classList.toggle('on', to === 'idle' || to === 'ready'));
+  // The friend's link stays up until they are here; the random strip shows between rounds.
+  bus.on('state', ({ to }) => strip.classList.toggle('on', room ? to === 'idle' && !matched : to === 'idle' || to === 'ready'));
 
   const follower = {
     start() {

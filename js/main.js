@@ -18,14 +18,14 @@ import { createLook } from './look.js';
 import { createRemote, remoteFromUrl } from './remote.js';
 import { deliverReply } from './direct.js';
 import { runNetTest } from './nettest.js';
-import { createRoulette, rouletteFromUrl, rouletteOnline } from './roulette.js';
+import { createRoulette, newRoomCode, rouletteFromUrl, rouletteOnline, roomFromUrl } from './roulette.js';
 import { createAds } from './ads.js';
 import { drawCard, saveCard } from './card.js';
 import { createAnalytics } from './analytics.js';
 import { FACE_OVAL, IDX } from './face.js';
 import { el, onTap } from './util.js';
 
-export const VERSION = '1.17.0';
+export const VERSION = '1.18.0';
 
 const MESSAGES = {
   insecure: [
@@ -64,7 +64,8 @@ const isReply = linkPage?.role === 'reply'; // the friend's reply link, opened b
 const isNetTest = new URLSearchParams(location.search).has('nettest'); // network check page: no game either
 const remoteUrl = isReply || isNetTest ? null : linkPage;
 // Mask roulette (?roulette): a random stranger, seen only as face points (roulette.js).
-const isRoulette = !linkPage && !isNetTest && rouletteFromUrl();
+const friendRoom = !linkPage && !isNetTest ? roomFromUrl() : null; // ?room=code: a friend's room on our server
+const isRoulette = !linkPage && !isNetTest && (rouletteFromUrl() || !!friendRoom);
 const glued = !!remoteUrl || isRoulette; // the main video shows a glued picture (glue.js)
 const camVideo = glued ? el('video', { class: 'src-video', muted: true, playsinline: true, autoplay: true }) : video;
 if (glued) root.append(camVideo);
@@ -88,7 +89,7 @@ const cameo = createCameo({ layer: document.getElementById('cameo'), bus, settin
 const record = createRecord();
 createAds({ bus, root, ui }); // off unless configured (ads-config.js, /api/config)
 const remote = remoteUrl && createRemote({ ...remoteUrl, bus, root, ui, video, camVideo, settings });
-const roulette = isRoulette ? createRoulette({ bus, root, video, camVideo, settings }) : null;
+const roulette = isRoulette ? createRoulette({ bus, root, video, camVideo, settings, room: friendRoom }) : null;
 // The guest's round is run by the host, the roulette's by the server; they only follow events.
 const mode =
   roulette
@@ -390,17 +391,21 @@ bus.on('ui:settings', () => sheet.open());
 
 // "Play by link" in idle: only in a browser tab with internet, never in the installed kiosk app.
 const linkButton = document.getElementById('btn-link');
+let serverHere = false; // our roulette server answers next to the site
 const kiosk = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
 if (!remote && !roulette && !kiosk && navigator.onLine) {
   root.dataset.net = '';
   // Served with the roulette server next to it (not on GitHub Pages): offer a random stranger.
   rouletteOnline().then((n) => {
     if (n === null) return;
+    serverHere = true; // "play by link" goes through our server now (a friend's room)
     root.dataset.roulette = '';
     document.getElementById('btn-roulette').textContent = n > 0 ? `Случайный соперник · ${n} онлайн` : 'Случайный соперник';
   });
 }
-onTap(linkButton, () => location.assign(`${location.pathname}?host`));
+// With our own server next to the site, the link is a friend's room through it (works on any
+// network that opens the site); without one (GitHub Pages), the browser-to-browser video link.
+onTap(linkButton, () => location.assign(serverHere ? `${location.pathname}?room=${newRoomCode()}` : `${location.pathname}?host`));
 
 // ───── "Для TikTok": the result as a vertical picture (card.js) ─────
 // Not on the school panel (the installed app full-screen on a big touch screen): it is a
@@ -411,7 +416,7 @@ if (panel) cardButton.remove();
 // Visit statistics: only with a configured counter and the player's yes, never on the panel,
 // and only where the address holds no secrets. Metrica attaches the page address to every
 // goal; the video link's address carries the room code or the connection offer (#…).
-const secretUrl = !!linkPage || isNetTest || !!location.hash || /[?&](turn|peer)=/.test(location.search);
+const secretUrl = !!linkPage || !!friendRoom || isNetTest || !!location.hash || /[?&](turn|peer)=/.test(location.search);
 createAnalytics({ bus, root, mode: roulette ? 'roulette' : 'local', enabled: !panel && !secretUrl });
 let lastResult = null;
 bus.on('round:result', (res) => (lastResult = res));
